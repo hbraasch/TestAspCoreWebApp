@@ -1,7 +1,17 @@
+using EasyMinutesServer.Models;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddControllers();
+var connectionstring = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<DbaseContext>(options => { options.UseSqlite(connectionstring); options.EnableSensitiveDataLogging(true); });
+
+builder.Services.AddSingleton<IMailWorker, MailWorker>();
+builder.Services.AddHostedService<BackgroundMailer>();
+builder.Services.AddTransient<MinutesModel>();
 
 var app = builder.Build();
 
@@ -21,5 +31,6 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapRazorPages();
+app.MapControllers();
 
 app.Run();
