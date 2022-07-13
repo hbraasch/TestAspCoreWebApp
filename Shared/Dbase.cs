@@ -1,9 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
-
-namespace EasyMinutesServer.Shared
+﻿namespace EasyMinutesServer.Shared
 {
-    #nullable enable
+#nullable enable
     public class Dbase
     {
 
@@ -32,6 +29,7 @@ namespace EasyMinutesServer.Shared
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
             public bool IsDirty { get; set; }
+            public int ParentId { get; set; }
 
             public List<TopicSession> Sessions { get; set; } = new List<TopicSession>();
         }

@@ -106,13 +106,12 @@ namespace EasyMinutesServer.Models
             public bool IsDeleted { get; set; }
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
-
-
+            public int ParentId { get; set; }
             public virtual List<TopicSessionCx> Sessions { get; set; } = new List<TopicSessionCx>();
 
             public Topic FromDb()
             {
-                return new Topic { Id = Id, Name = Name, IsDeleted = IsDeleted, DisplayOrder = DisplayOrder, IsChecked = IsChecked, Sessions = Sessions.FromDb() };
+                return new Topic { Id = Id, Name = Name, IsDeleted = IsDeleted, DisplayOrder = DisplayOrder, IsChecked = IsChecked, Sessions = Sessions.FromDb(), ParentId = ParentId };
             }
         }
 
@@ -216,6 +215,7 @@ namespace EasyMinutesServer.Models
             list.ForEach(o => convert.Add(o.FromDb()));
             return convert;
         }
+
 
         public static List<TopicSession> FromDb(this List<TopicSessionCx> list)
         {

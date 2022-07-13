@@ -9,6 +9,7 @@ using System.Text;
 using TreeApps.Maui.Helpers;
 using static EasyMinutesServer.Models.DbaseContext;
 using static EasyMinutesServer.Shared.Dbase;
+using static EasyMinutesServer.Shared.MinutesController;
 
 namespace EasyMinutesServer.Models
 {
@@ -48,10 +49,11 @@ namespace EasyMinutesServer.Models
         internal MeetingCx? GetMeeting(int meetingId)
         {
             if (dbase.Meetings == null) return null;
-            var meetings = dbase.Meetings.Include(o => o.Topics)
+            var meetings = dbase.Meetings
                 .Include(o => o.Delegates)
                 .Include(o => o.Author)
                 .Include(o => o.Topics).ThenInclude(t => t.Sessions).ThenInclude(a => a.AllocatedParticipants);
+            var meeting = meetings.FirstOrDefault(o => o.Id == meetingId);
             return meetings.FirstOrDefault(o => o.Id == meetingId);
         }
 
@@ -71,19 +73,35 @@ namespace EasyMinutesServer.Models
             return meeting;
         }
 
-        public void UpdateMeeting(int meetingId, int authorId, List<int>editorIds, string meetingName)
+        public void UpdateMeeting(int meetingId, int authorId, List<int>delegateIds, string meetingName)
         {
             if (dbase == null) throw new Exception("Server dbase is null");
             if (dbase.Meetings == null) throw new Exception("Server dbase table [Meetings] is null");
-            var meeting = dbase.Meetings.FirstOrDefault(o=>o.Id == meetingId);
+            var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting does not exist");
             var author = GetParticipant(authorId);
             if (author == null) throw new Exception("Author does not exist");
-            var editors = dbase.Participants.Where(o=>editorIds.Contains(o.Id)).ToList();
             meeting.Author = author;
-            editors.ForEach(o => meeting.Delegates.Add(o));
-            meeting.Delegates = meeting.Delegates.Distinct().ToList();
+            ChangeMeetingDelegates(meeting, delegateIds);
             meeting.Name = meetingName;
+            dbase.SaveChanges();
+        }
+
+        private void ChangeMeetingDelegates(MeetingCx meeting, List<int> delegateIds)
+{
+            var updateDelegates = dbase.Participants.Where(p => delegateIds.Contains(p.Id)).ToList();
+            var currentDelegates = meeting.Delegates;
+
+            // Remove missing ones
+            var missingDelegates = currentDelegates.Except(updateDelegates).ToList();
+            currentDelegates.RemoveAll(o => missingDelegates.Contains(o));
+
+            // Add new ones
+            var addDelegates = updateDelegates.Except(currentDelegates);
+            currentDelegates.AddRange(addDelegates);
+
+            meeting.Delegates = currentDelegates;
+
             dbase.SaveChanges();
         }
 
@@ -168,7 +186,7 @@ namespace EasyMinutesServer.Models
         {
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
-            var topic  = new TopicCx {  Name = title, DisplayOrder = meeting.Topics.Count };
+            var topic  = new TopicCx {  Name = title, DisplayOrder = meeting.Topics.Count, ParentId = 0 };
             meeting.Topics.Add(topic);
             topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = DateTimeOffset.Now, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
             dbase.SaveChanges();
@@ -233,6 +251,15 @@ namespace EasyMinutesServer.Models
 
             return topics;
 
+        }
+
+        internal List<TopicCx> ChangeTopicHierarchy(int meetingId, int parentTopicId, int childTopicId)
+        {
+            var childTopic = GetTopic(childTopicId);
+            if (childTopic == null) throw new Exception("Child topic is null");
+            childTopic.ParentId = parentTopicId;
+            dbase.SaveChanges();
+            return GetTopics(meetingId);
         }
 
         internal void DeleteTopic(int topicId)
@@ -766,7 +793,7 @@ namespace EasyMinutesServer.Models
             return sb.ToString();
         }
 
-        internal void ServerTest()
+        internal static void ServerTest()
         {
             try
             {
@@ -777,10 +804,10 @@ namespace EasyMinutesServer.Models
                     EnableSsl = true,
                 };
                 //create the mail message 
-                MailMessage mail = new MailMessage();
-
-                //set the addresses 
-                mail.From = new MailAddress("treeapps.develop@gmail.com"); //IMPORTANT: This must be same as your smtp authentication address.
+                var mail = new MailMessage
+                {
+                    From = new MailAddress("treeapps.develop@gmail.com") //IMPORTANT: This must be same as your smtp authentication address.
+                };
                 mail.To.Add("hrbraasch@gmail.com");
 
                 //set the content 
@@ -794,6 +821,13 @@ namespace EasyMinutesServer.Models
                 Debug.WriteLine(ex.Message);
             }
         }
+
+        internal static object ChangeTopicHierarchy()
+        {
+            throw new NotImplementedException();
+        }
+
+
     }
 
 

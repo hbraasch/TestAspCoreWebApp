@@ -887,7 +887,7 @@ namespace EasyMinutesServer.Shared
             {
                 public int MeetingId { get; set; }
                 public int AuthorId { get; set; }
-                public List<int> EditorIds { get; set; } = new();
+                public List<int> DelegateIds { get; set; } = new();
                 public string MeetingName { get; set; } = "";
             }
 
@@ -898,16 +898,16 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task UpdateMeeting(int meetingId, int authorId, List<int> editorIds, string meetingName, CancellationTokenSource cts)
+        internal async Task UpdateMeeting(int meetingId, int authorId, List<int> delegateIds, string meetingName, CancellationTokenSource cts)
         {
-            await SendMessage<UpdateMeetingMC.Command, UpdateMeetingMC.Response>(new UpdateMeetingMC.Command { MeetingId = meetingId, AuthorId = authorId, EditorIds = editorIds, MeetingName = meetingName }, nameof(UpdateMeeting), cts);
+            await SendMessage<UpdateMeetingMC.Command, UpdateMeetingMC.Response>(new UpdateMeetingMC.Command { MeetingId = meetingId, AuthorId = authorId, DelegateIds = delegateIds, MeetingName = meetingName }, nameof(UpdateMeeting), cts);
         }
 #else
         [HttpPost]
         public async Task<ActionResult<UpdateMeetingMC.Response>> UpdateMeeting([FromBody] UpdateMeetingMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.UpdateMeeting(command.MeetingId, command.AuthorId, command.EditorIds, command.MeetingName);
+                minutesModel.UpdateMeeting(command.MeetingId, command.AuthorId, command.DelegateIds, command.MeetingName);
                 return new UpdateMeetingMC.Response { };
             });
 
@@ -941,8 +941,8 @@ namespace EasyMinutesServer.Shared
         public async Task<ActionResult<SignInMC.Response>> SignIn([FromBody] SignInMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                (ParticipantCx? participant, string errorMessage) result = minutesModel.SignIn(command.Email, command.Password);
-                return new SignInMC.Response { Participant = result.participant?.FromDb(), Instruction = result.errorMessage };
+                var (participant, errorMessage) = minutesModel.SignIn(command.Email, command.Password);
+                return new SignInMC.Response { Participant = participant?.FromDb(), Instruction = errorMessage };
             });
 
             return AcceptedAtAction(nameof(SignIn), response);
@@ -973,8 +973,8 @@ namespace EasyMinutesServer.Shared
         public async Task<ActionResult<SignInUsingPinMC.Response>> SignInUsingPin([FromBody] SignInUsingPinMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                (ParticipantCx? participant, string errorMessage) result = minutesModel.SignIn(command.Pin);
-                return new SignInUsingPinMC.Response { Participant = result.participant?.FromDb(), Instruction = result.errorMessage };
+                var (participant, errorMessage) = minutesModel.SignIn(command.Pin);
+                return new SignInUsingPinMC.Response { Participant = participant?.FromDb(), Instruction = errorMessage };
             });
 
             return AcceptedAtAction(nameof(SignInUsingPin), response);
@@ -1356,18 +1356,55 @@ namespace EasyMinutesServer.Shared
         {
             await SendMessage<ServerTestMC.Command, ServerTestMC.Response>(new ServerTestMC.Command(), nameof(ServerTest), cts);
         }
+
+
 #else
         [HttpPost]
         public async Task<ActionResult<ServerTestMC.Response>> ServerTest([FromBody] ServerTestMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.ServerTest();
+                MinutesModel.ServerTest();
                 return new ServerTestMC.Response { };
             });
 
             return AcceptedAtAction(nameof(ServerTest), response);
         }
 #endif
+        public class ChangeTopicHierarchyMC
+        {
+            public class Command
+            {
+                public int MeetingId { get; set; } = 0;
+                public int ParentTopicId { get; set; } = 0;
+                public int ChildTopicId { get; set; } = 0;
+            }
+
+            public class Response : ResponseBase
+            {
+                public List<Topic> Topics { get; set; } = new();
+            }
+        }
+
+#if __CLIENT__
+        internal async Task<List<Topic>> ChangeTopicHierarchy(int meetingId, int parentTopicId, int childTopicId, CancellationTokenSource cts)
+        {
+            return (await SendMessage<ChangeTopicHierarchyMC.Command, ChangeTopicHierarchyMC.Response>(new ChangeTopicHierarchyMC.Command { MeetingId = meetingId, ParentTopicId = parentTopicId, ChildTopicId = childTopicId }, nameof(ChangeTopicHierarchy), cts))?.Topics??new();
+        }
+
+
+#else
+        [HttpPost]
+        public async Task<ActionResult<ChangeTopicHierarchyMC.Response>> ChangeTopicHierarchy([FromBody] ChangeTopicHierarchyMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                var topics = minutesModel.ChangeTopicHierarchy(command.MeetingId, command.ParentTopicId, command.ChildTopicId).FromDb();
+                return new ChangeTopicHierarchyMC.Response { Topics = topics };
+            });
+
+            return AcceptedAtAction(nameof(ChangeTopicHierarchy), response);
+        }
+#endif
+
 
 
 #if __CLIENT__

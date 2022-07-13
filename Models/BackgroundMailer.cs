@@ -50,7 +50,7 @@ namespace EasyMinutesServer.Models
 
             if (Constants.IsMailServerReal)
             {
-                // Send actual mail using Gmail SMTP
+                // Send actual mail using Gmail SMTP - https://stackoverflow.com/questions/67950293/how-to-fix-gmail-smtp-error-the-smtp-server-requires-a-secure-connection-or-th
                 client = new SmtpClient("smtp.gmail.com")
                 {
                     Port = 587,
