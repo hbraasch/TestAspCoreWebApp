@@ -169,6 +169,7 @@ namespace EasyMinutesServer.Models
 
 
 
+        #region *// Topics
         internal List<TopicCx> GetTopics(int meetingId)
         {
             var meeting = GetMeeting(meetingId);
@@ -179,19 +180,57 @@ namespace EasyMinutesServer.Models
         internal TopicCx? GetTopic(int topicId)
         {
             if (dbase.Topics == null) return null;
-            return dbase.Topics.Include(o=>o.Sessions).ThenInclude(session => session.AllocatedParticipants).FirstOrDefault(o => o.Id == topicId);
+            return dbase.Topics.Include(o => o.Sessions).ThenInclude(session => session.AllocatedParticipants).FirstOrDefault(o => o.Id == topicId);
         }
 
-        internal TopicCx CreateTopic(int meetingId, string title)
+        internal TopicCx CreateTopic(int meetingId, int parentTopicId, int beforeTopicId,  string title)
         {
+            TopicCx topic;
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
-            var topic  = new TopicCx {  Name = title, DisplayOrder = meeting.Topics.Count, ParentId = 0 };
+            if ((parentTopicId == 0) && (beforeTopicId == 0))
+            {
+                // Brand new topic
+                topic = new TopicCx { Name = title, ParentId = 0, DisplayOrder = 0 };
+            }
+            else if ((parentTopicId == 0) && (beforeTopicId != 0))
+            {
+                // New topic is root, inbetween topic. Place new one after the [BeforeTopic]
+                var beforeTopic = GetTopic(beforeTopicId);
+                if (beforeTopic == null) throw new Exception("BeforeTopic is null");
+                topic = new TopicCx { Name = title, ParentId = 0 };
+                InsertAfterTopic(meeting, beforeTopic, topic);
+            }
+            else 
+            {
+                // New topic is child topic, place after beforeTopic
+                if (beforeTopicId == 0) throw new Exception("BeforeTopicId is zero");
+                var beforeTopic = GetTopic(beforeTopicId);
+                if (beforeTopic == null) throw new Exception("BeforeTopic is null");
+                topic = new TopicCx { Name = title, ParentId = parentTopicId };
+                InsertAfterTopic(meeting, beforeTopic, topic);
+            }
+
             meeting.Topics.Add(topic);
             topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = DateTimeOffset.Now, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
             dbase.SaveChanges();
 
             return topic;
+        }
+
+        private static void InsertAfterTopic(MeetingCx meeting, TopicCx beforeTopic, TopicCx topic)
+        {
+            topic.DisplayOrder = beforeTopic.DisplayOrder + 1;
+            var afterTopics = GetChildTopics(meeting, beforeTopic.ParentId).Where(o => o.DisplayOrder > beforeTopic.DisplayOrder).ToList();
+            if (afterTopics.Count != 0)
+            {
+                afterTopics.ForEach(o => o.DisplayOrder += 1);
+            }
+        }
+
+        private static List<TopicCx> GetChildTopics(MeetingCx meeting, int parentTopicId)
+        {
+            return meeting.Topics.Where(o=>o.ParentId == parentTopicId && !o.IsDeleted).OrderBy(o=>o.DisplayOrder).ToList() ;
         }
 
         /// <summary>
@@ -203,7 +242,7 @@ namespace EasyMinutesServer.Models
         internal void UpdateTopic(int topicId, string title)
         {
             if (dbase.Topics == null) throw new Exception("Server dbase table [Topics] is null");
-            var topic = dbase.Topics.FirstOrDefault(o=>o.Id == topicId);
+            var topic = dbase.Topics.FirstOrDefault(o => o.Id == topicId);
             if (topic == null) throw new Exception("Topic is null");
             topic.Name = title;
             dbase.SaveChanges();
@@ -253,11 +292,57 @@ namespace EasyMinutesServer.Models
 
         }
 
-        internal List<TopicCx> ChangeTopicHierarchy(int meetingId, int parentTopicId, int childTopicId)
+        internal List<TopicCx> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, int belowTopicId, bool isLevelDown)
         {
-            var childTopic = GetTopic(childTopicId);
-            if (childTopic == null) throw new Exception("Child topic is null");
-            childTopic.ParentId = parentTopicId;
+            var meeting = GetMeeting(meetingId);
+            if (meeting == null) throw new Exception("Meeting is null");
+
+            var changeTopic = GetTopic(changeTopicId);
+            if (changeTopic == null) throw new Exception("Change topic is null");
+            if (isLevelDown)
+            {
+                if (aboveTopicId == 0) throw new Exception("First item cannot move down");
+                var aboveTopic = GetTopic(aboveTopicId);
+
+                if (changeTopic.ParentId == aboveTopic?.ParentId)
+                {
+                    // Above and changed is on the same level
+                    // Above becomes changed one's parent
+                    #region *// Renumber old peer children since item has been removed
+                    var currentChangePeerChildrenTail = GetChildTopics(meeting, changeTopic.ParentId).Where(o => o.DisplayOrder > changeTopic.DisplayOrder).ToList();
+                    currentChangePeerChildrenTail.ForEach(o => o.DisplayOrder -= 1);
+                    #endregion
+
+                    // Changed one becomed first one of own children
+                    var changeTopicChildren = GetChildTopics(meeting, changeTopic.Id);
+                    changeTopic.DisplayOrder = 0;
+                    changeTopicChildren.ForEach(o => o.DisplayOrder += 1);
+
+                    // Change hierarchy
+                    changeTopic.ParentId = aboveTopicId;
+                }
+                else
+                {
+                    // [Above] and [changed] is on the different levels ([above] can only be lower level at this point)
+                    // [Changed] becomes peer child as [above], last one
+                    #region *// Renumber old peer children since item has been removed
+                    var currentChangePeerChildrenTail = GetChildTopics(meeting, changeTopic.ParentId).Where(o => o.DisplayOrder > changeTopic.DisplayOrder).ToList();
+                    currentChangePeerChildrenTail.ForEach(o => o.DisplayOrder -= 1); 
+                    #endregion
+
+                    #region *// Renumber new peer children [change] became part of
+                    var newParentPeerChildren = GetChildTopics(meeting, aboveTopic?.ParentId ?? 0);
+                    changeTopic.DisplayOrder = newParentPeerChildren.Count - 1;
+                    #endregion
+
+                    // Change hierarchy
+                    changeTopic.ParentId = aboveTopic?.ParentId ?? 0;
+                }               
+            }
+            else
+            {
+
+            }
             dbase.SaveChanges();
             return GetTopics(meetingId);
         }
@@ -273,7 +358,9 @@ namespace EasyMinutesServer.Models
             dbase.Topics.Remove(topic);
             dbase.SaveChanges();
         }
+        #endregion
 
+        #region *// Sessions
         internal List<TopicSessionCx> GetTopicSessions(int topicId)
         {
             if (dbase.Sessions == null) return new();
@@ -285,7 +372,7 @@ namespace EasyMinutesServer.Models
         internal TopicSessionCx? GetTopicSession(int topicSessionId)
         {
             if (dbase.Sessions == null) return null;
-            return dbase.Sessions.Include(o=>o.AllocatedParticipants).Include(o=>o.Topic).FirstOrDefault(o => o.Id == topicSessionId && !o.IsDeleted);
+            return dbase.Sessions.Include(o => o.AllocatedParticipants).Include(o => o.Topic).FirstOrDefault(o => o.Id == topicSessionId && !o.IsDeleted);
         }
 
         internal void AddTopicSession(int currentTopicSessionId, DateTimeOffset dateTimeStamp)
@@ -316,7 +403,7 @@ namespace EasyMinutesServer.Models
             List<TopicSessionCx> sessions = new();
             foreach (var topic in topics)
             {
-                sessions.Add(topic.Sessions.OrderBy(o=>o.DateTimeStamp).Last());
+                sessions.Add(topic.Sessions.OrderBy(o => o.DateTimeStamp).Last());
             }
             var timestamp = DateTimeOffset.UtcNow;
             foreach (var session in sessions)
@@ -346,7 +433,8 @@ namespace EasyMinutesServer.Models
             currentTopicSession.ToBeCompletedDate = toBeCompletedDate;
             SetParticipants(currentTopicSession, participants);
             dbase.SaveChanges();
-        }
+        } 
+        #endregion
 
 
         #endregion

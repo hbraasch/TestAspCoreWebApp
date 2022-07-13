@@ -726,8 +726,10 @@ namespace EasyMinutesServer.Shared
         {
             public class Command
             {
-                public int MeetingId { get; set; }
-                public string Title { get; set; } = ""    ;
+                public int MeetingId { get; set; } = 0;
+                public int ParentTopicId { get; set; } = 0;
+                public int BeforeTopicId { get; set; } = 0;
+                public string Title { get; set; } = "";
             }
 
             public class Response : ResponseBase
@@ -737,16 +739,16 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<Topic?> CreateTopic(int meetingId, string title, CancellationTokenSource cts)
+        internal async Task<Topic?> CreateTopic(int meetingId, int parentTopicId, int beforeTopicId, string title, CancellationTokenSource cts)
         {
-            return (await SendMessage<CreateTopicMC.Command, CreateTopicMC.Response>(new CreateTopicMC.Command { MeetingId = meetingId, Title = title }, nameof(CreateTopic), cts))?.Topic;
+            return (await SendMessage<CreateTopicMC.Command, CreateTopicMC.Response>(new CreateTopicMC.Command { MeetingId = meetingId, ParentTopicId = parentTopicId, BeforeTopicId = beforeTopicId, Title = title }, nameof(CreateTopic), cts))?.Topic;
         }
 #else
         [HttpPost]
         public async Task<ActionResult<CreateTopicMC.Response>> CreateTopic([FromBody] CreateTopicMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var topic = minutesModel.CreateTopic(command.MeetingId, command.Title).FromDb();
+                var topic = minutesModel.CreateTopic(command.MeetingId, command.ParentTopicId, command.BeforeTopicId, command.Title).FromDb();
                 return new CreateTopicMC.Response { Topic = topic };
             });
 
@@ -1375,8 +1377,10 @@ namespace EasyMinutesServer.Shared
             public class Command
             {
                 public int MeetingId { get; set; } = 0;
-                public int ParentTopicId { get; set; } = 0;
-                public int ChildTopicId { get; set; } = 0;
+                public int AboveTopicId { get; set; } = 0;
+                public int ChangeTopicId { get; set; } = 0;
+                public int BelowTopicId { get; set; } = 0;
+                public bool IsLevelDown { get; set; } = false;
             }
 
             public class Response : ResponseBase
@@ -1386,9 +1390,9 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<List<Topic>> ChangeTopicHierarchy(int meetingId, int parentTopicId, int childTopicId, CancellationTokenSource cts)
+        internal async Task<List<Topic>> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, int belowTopicId, bool isLevelDown, CancellationTokenSource cts)
         {
-            return (await SendMessage<ChangeTopicHierarchyMC.Command, ChangeTopicHierarchyMC.Response>(new ChangeTopicHierarchyMC.Command { MeetingId = meetingId, ParentTopicId = parentTopicId, ChildTopicId = childTopicId }, nameof(ChangeTopicHierarchy), cts))?.Topics??new();
+            return (await SendMessage<ChangeTopicHierarchyMC.Command, ChangeTopicHierarchyMC.Response>(new ChangeTopicHierarchyMC.Command { MeetingId = meetingId, AboveTopicId = aboveTopicId, ChangeTopicId = changeTopicId, BelowTopicId = belowTopicId, IsLevelDown = isLevelDown }, nameof(ChangeTopicHierarchy), cts))?.Topics??new();
         }
 
 
@@ -1397,7 +1401,7 @@ namespace EasyMinutesServer.Shared
         public async Task<ActionResult<ChangeTopicHierarchyMC.Response>> ChangeTopicHierarchy([FromBody] ChangeTopicHierarchyMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var topics = minutesModel.ChangeTopicHierarchy(command.MeetingId, command.ParentTopicId, command.ChildTopicId).FromDb();
+                var topics = minutesModel.ChangeTopicHierarchy(command.MeetingId, command.AboveTopicId, command.ChangeTopicId, command.BelowTopicId, command.IsLevelDown).FromDb();
                 return new ChangeTopicHierarchyMC.Response { Topics = topics };
             });
 
