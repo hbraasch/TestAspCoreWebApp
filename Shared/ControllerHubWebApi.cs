@@ -1379,8 +1379,7 @@ namespace EasyMinutesServer.Shared
                 public int MeetingId { get; set; } = 0;
                 public int AboveTopicId { get; set; } = 0;
                 public int ChangeTopicId { get; set; } = 0;
-                public int BelowTopicId { get; set; } = 0;
-                public bool IsLevelDown { get; set; } = false;
+                public bool Demote { get; set; } = false;
             }
 
             public class Response : ResponseBase
@@ -1390,9 +1389,9 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<List<Topic>> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, int belowTopicId, bool isLevelDown, CancellationTokenSource cts)
+        internal async Task<List<Topic>> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, bool demote, CancellationTokenSource cts)
         {
-            return (await SendMessage<ChangeTopicHierarchyMC.Command, ChangeTopicHierarchyMC.Response>(new ChangeTopicHierarchyMC.Command { MeetingId = meetingId, AboveTopicId = aboveTopicId, ChangeTopicId = changeTopicId, BelowTopicId = belowTopicId, IsLevelDown = isLevelDown }, nameof(ChangeTopicHierarchy), cts))?.Topics??new();
+            return (await SendMessage<ChangeTopicHierarchyMC.Command, ChangeTopicHierarchyMC.Response>(new ChangeTopicHierarchyMC.Command { MeetingId = meetingId, AboveTopicId = aboveTopicId, ChangeTopicId = changeTopicId, Demote = demote }, nameof(ChangeTopicHierarchy), cts))?.Topics??new();
         }
 
 
@@ -1401,7 +1400,7 @@ namespace EasyMinutesServer.Shared
         public async Task<ActionResult<ChangeTopicHierarchyMC.Response>> ChangeTopicHierarchy([FromBody] ChangeTopicHierarchyMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var topics = minutesModel.ChangeTopicHierarchy(command.MeetingId, command.AboveTopicId, command.ChangeTopicId, command.BelowTopicId, command.IsLevelDown).FromDb();
+                var topics = minutesModel.ChangeTopicHierarchy(command.MeetingId, command.AboveTopicId, command.ChangeTopicId, command.Demote).FromDb();
                 return new ChangeTopicHierarchyMC.Response { Topics = topics };
             });
 

@@ -180,6 +180,7 @@ namespace EasyMinutesServer.Models
         internal TopicCx? GetTopic(int topicId)
         {
             if (dbase.Topics == null) return null;
+            if (topicId == 0) return null;
             return dbase.Topics.Include(o => o.Sessions).ThenInclude(session => session.AllocatedParticipants).FirstOrDefault(o => o.Id == topicId);
         }
 
@@ -292,55 +293,90 @@ namespace EasyMinutesServer.Models
 
         }
 
-        internal List<TopicCx> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, int belowTopicId, bool isLevelDown)
+        internal List<TopicCx> ChangeTopicHierarchy(int meetingId, int aboveTopicId, int changeTopicId, bool demote)
         {
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
 
             var changeTopic = GetTopic(changeTopicId);
             if (changeTopic == null) throw new Exception("Change topic is null");
-            if (isLevelDown)
+            if (demote)
             {
+                // [change] becomes last child of [above]
+
                 if (aboveTopicId == 0) throw new Exception("First item cannot move down");
                 var aboveTopic = GetTopic(aboveTopicId);
+                if (aboveTopic == null) throw new Exception("Above topic is null");
 
-                if (changeTopic.ParentId == aboveTopic?.ParentId)
+                #region *// Remove from old parent's children and renumber
+                List<TopicCx> removeFromChildren = new();
+                if (aboveTopic.ParentId == 0)
                 {
-                    // Above and changed is on the same level
-                    // Above becomes changed one's parent
-                    #region *// Renumber old peer children since item has been removed
-                    var currentChangePeerChildrenTail = GetChildTopics(meeting, changeTopic.ParentId).Where(o => o.DisplayOrder > changeTopic.DisplayOrder).ToList();
-                    currentChangePeerChildrenTail.ForEach(o => o.DisplayOrder -= 1);
-                    #endregion
-
-                    // Changed one becomed first one of own children
-                    var changeTopicChildren = GetChildTopics(meeting, changeTopic.Id);
-                    changeTopic.DisplayOrder = 0;
-                    changeTopicChildren.ForEach(o => o.DisplayOrder += 1);
-
-                    // Change hierarchy
-                    changeTopic.ParentId = aboveTopicId;
+                    removeFromChildren = meeting.Topics;
                 }
                 else
                 {
-                    // [Above] and [changed] is on the different levels ([above] can only be lower level at this point)
-                    // [Changed] becomes peer child as [above], last one
-                    #region *// Renumber old peer children since item has been removed
-                    var currentChangePeerChildrenTail = GetChildTopics(meeting, changeTopic.ParentId).Where(o => o.DisplayOrder > changeTopic.DisplayOrder).ToList();
-                    currentChangePeerChildrenTail.ForEach(o => o.DisplayOrder -= 1); 
-                    #endregion
+                    removeFromChildren = GetChildTopics(meeting, aboveTopic.ParentId);
+                }
+                var removeFromChildrenTail = removeFromChildren.Where(o => o.DisplayOrder > changeTopic.DisplayOrder).ToList();
+                removeFromChildrenTail.ForEach(o => o.DisplayOrder -= 1);
+                #endregion
 
-                    #region *// Renumber new peer children [change] became part of
-                    var newParentPeerChildren = GetChildTopics(meeting, aboveTopic?.ParentId ?? 0);
-                    changeTopic.DisplayOrder = newParentPeerChildren.Count - 1;
-                    #endregion
+                #region *// Add to new parent's children. Number new addition as list item
+                List<TopicCx> addToChildren = GetChildTopics(meeting, aboveTopicId);
+                changeTopic.DisplayOrder = addToChildren.Count;
+                #endregion
 
-                    // Change hierarchy
-                    changeTopic.ParentId = aboveTopic?.ParentId ?? 0;
-                }               
+
+                // Change hierarchy
+                changeTopic.ParentId = aboveTopicId;
+          
             }
             else
             {
+                // Promote
+
+                var changeParent = GetTopic(changeTopic.ParentId);
+                if (changeParent == null)
+                {
+                    // [change] becomes new root topic
+
+                    // All old root children gets demoted
+                    var oldRootChildren = GetChildTopics(meeting, 0).Where(o=>o.Id != changeTopicId).ToList();
+                    oldRootChildren.ForEach(o => o.ParentId = changeTopicId);
+
+                    // Old root children loses [change] and gets renumbered
+                    var newChangeChildren = GetChildTopics(meeting, changeTopicId).Where(o=>o.Id != changeTopicId).ToList();
+                    int order = 0;
+                    newChangeChildren.ForEach(o=>o.DisplayOrder = order++);
+
+                    // Promote [change]
+                    changeTopic.ParentId = 0;
+
+                    // [change] is first of all future root children
+                    changeTopic.DisplayOrder = 0;
+                }
+                else
+                {
+                    // Only [change](and its children) gets promoted
+                    // [change] becomes peer of parent by being inserted just after current parent
+                    // Current parent's children loses ONLY [change] 
+                    #region *// Make changes to parent children
+                    List<TopicCx> peerChildren = GetChildTopics(meeting, changeParent.ParentId); ;
+                    var peerChildrenTail = peerChildren.Where(o => o.DisplayOrder > changeParent.DisplayOrder).ToList();
+                    peerChildrenTail.ForEach(o => o.DisplayOrder += 1);
+
+                    changeTopic.ParentId = changeParent.ParentId;
+                    changeTopic.DisplayOrder = changeParent.DisplayOrder + 1;
+                    #endregion
+
+                    #region *// Remove [change] from previous parent's children by correcting their display order
+                    var oldParentChildren = GetChildTopics(meeting, changeParent.Id);
+                    int order = 0;
+                    oldParentChildren.ForEach(o => o.DisplayOrder = order++);
+                    #endregion
+                }
+
 
             }
             dbase.SaveChanges();
