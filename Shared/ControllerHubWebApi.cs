@@ -1395,6 +1395,8 @@ namespace EasyMinutesServer.Shared
         }
 
 
+
+
 #else
         [HttpPost]
         public async Task<ActionResult<ChangeTopicHierarchyMC.Response>> ChangeTopicHierarchy([FromBody] ChangeTopicHierarchyMC.Command command)
@@ -1408,7 +1410,41 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
+        public class SetTopicsCheckedMC
+        {
+            public class Command
+            {
+                public int MeetingId { get; set; } = 0;
+                public List<int> TopicIds { get; set; } = new();
+            }
 
+            public class Response : ResponseBase
+            {
+
+            }
+        }
+
+#if __CLIENT__
+        internal async Task SetTopicsChecked(int meetingId, List<int> topicIds, CancellationTokenSource cts)
+        {
+            await SendMessage<SetTopicsCheckedMC.Command, SetTopicsCheckedMC.Response>(new SetTopicsCheckedMC.Command { MeetingId = meetingId, TopicIds = topicIds  }, nameof(SetTopicsChecked), cts);
+        }
+
+
+
+
+#else
+        [HttpPost]
+        public async Task<ActionResult<SetTopicsCheckedMC.Response>> SetTopicsChecked([FromBody] SetTopicsCheckedMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                minutesModel.SetTopicsChecked(command.MeetingId, command.TopicIds);
+                return new ChangeTopicHierarchyMC.Response { };
+            });
+
+            return AcceptedAtAction(nameof(SetTopicsChecked), response);
+        }
+#endif
 
 #if __CLIENT__
 

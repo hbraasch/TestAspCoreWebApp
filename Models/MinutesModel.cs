@@ -50,9 +50,9 @@ namespace EasyMinutesServer.Models
         {
             if (dbase.Meetings == null) return null;
             var meetings = dbase.Meetings
-                .Include(o => o.Delegates)
+                .Include(o => o.Delegates.Where(d => !d.IsDeleted))
                 .Include(o => o.Author)
-                .Include(o => o.Topics).ThenInclude(t => t.Sessions).ThenInclude(a => a.AllocatedParticipants);
+                .Include(o => o.Topics.Where(t=>!t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s=>!s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p=>!p.IsDeleted));
             var meeting = meetings.FirstOrDefault(o => o.Id == meetingId);
             return meetings.FirstOrDefault(o => o.Id == meetingId);
         }
@@ -174,7 +174,7 @@ namespace EasyMinutesServer.Models
         {
             var meeting = GetMeeting(meetingId);
             if (meeting == null) return new();
-            return meeting.Topics;
+            return meeting.Topics.Where(o=>!o.IsDeleted).ToList();
         }
 
         internal TopicCx? GetTopic(int topicId)
@@ -257,18 +257,31 @@ namespace EasyMinutesServer.Models
             dbase.SaveChanges();
         }
 
+        internal void SetTopicsChecked(int meetingId, List<int> topicIds)
+        {
+            var meetingTopics = GetTopics(meetingId);
+            foreach (var topic in meetingTopics)
+            {
+                if (topicIds.Contains(topic.Id)) topic.IsChecked = true;
+                else topic.IsChecked = false;
+            }
+            dbase.SaveChanges();
+        }
+
         internal List<TopicCx> ChangeTopicsDisplayOrder(int meetingId, int topicId, bool isMoveUp)
         {
             var topic = GetTopic(topicId);
             if (topic == null) throw new Exception("Topic is null");
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
-            var topics = GetTopics(meeting.Id).OrderBy(o => o.DisplayOrder).ToList();
-            if (topics.Count == 0) return new();
+
+            var changeTopics = GetChildTopics(meeting, topic.ParentId);
+            if (changeTopics.Count == 0) return new();
+
             // Ensure displayorder integrity
             var displayOrder = 0;
-            topics.ForEach(o => o.DisplayOrder = displayOrder++);
-            var moveItem = topics.FirstOrDefault(o => o.Id == topicId);
+            changeTopics.ForEach(o => o.DisplayOrder = displayOrder++);
+            var moveItem = changeTopics.FirstOrDefault(o => o.Id == topicId);
             if (moveItem == null) throw new Exception("Move item is null");
             // Move
             if (isMoveUp)
@@ -276,20 +289,20 @@ namespace EasyMinutesServer.Models
                 var moveItemIndex = moveItem.DisplayOrder;
                 var newMoveItemIndex = moveItemIndex - 1;
                 newMoveItemIndex = Math.Max(newMoveItemIndex, 0);
-                topics[newMoveItemIndex].DisplayOrder = moveItemIndex;
-                topics[moveItemIndex].DisplayOrder = newMoveItemIndex;
+                changeTopics[newMoveItemIndex].DisplayOrder = moveItemIndex;
+                changeTopics[moveItemIndex].DisplayOrder = newMoveItemIndex;
             }
             else
             {
                 var moveItemIndex = moveItem.DisplayOrder;
                 var newMoveItemIndex = moveItemIndex + 1;
-                newMoveItemIndex = Math.Min(newMoveItemIndex, topics.Count - 1);
-                topics[newMoveItemIndex].DisplayOrder = moveItemIndex;
-                topics[moveItemIndex].DisplayOrder = newMoveItemIndex;
+                newMoveItemIndex = Math.Min(newMoveItemIndex, changeTopics.Count - 1);
+                changeTopics[newMoveItemIndex].DisplayOrder = moveItemIndex;
+                changeTopics[moveItemIndex].DisplayOrder = newMoveItemIndex;
             }
             dbase.SaveChanges();
 
-            return topics;
+            return changeTopics;
 
         }
 
@@ -385,13 +398,11 @@ namespace EasyMinutesServer.Models
 
         internal void DeleteTopic(int topicId)
         {
-            if (dbase.Topics == null) throw new Exception("Server dbase table [Topics] is null");
-            if (dbase.Sessions == null) throw new Exception("Server dbase table [Sessions] is null");
             var topic = GetTopic(topicId);
             if (topic == null) throw new Exception("Topic is null");
             var sessions = GetTopicSessions(topicId);
-            dbase.Sessions.RemoveRange(sessions);
-            dbase.Topics.Remove(topic);
+            sessions.ForEach(o => o.IsDeleted = true);
+            topic.IsDeleted = true;
             dbase.SaveChanges();
         }
         #endregion
