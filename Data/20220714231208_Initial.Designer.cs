@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EasyMinutesServer.Data
 {
     [DbContext(typeof(DbaseContext))]
-    [Migration("20220713023713_Initial")]
+    [Migration("20220714231208_Initial")]
     partial class Initial
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

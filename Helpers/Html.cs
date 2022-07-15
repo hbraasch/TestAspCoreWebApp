@@ -38,6 +38,9 @@ namespace EasyMinutesServer.Helpers
             padding: 40px;
             text-align: center;
         }
+        #fontsize {
+            font-size: 70%;
+        }
     </style>
 </head>
 ";

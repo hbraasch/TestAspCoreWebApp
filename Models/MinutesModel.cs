@@ -2,6 +2,7 @@
 using EasyMinutesServer.Shared;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
+using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
@@ -32,10 +33,10 @@ namespace EasyMinutesServer.Models
             if (dbase.Meetings == null) return new ();
             var participant = GetParticipant(participantId);
             if (participant == null) throw new Exception("Participant does not exist");
-            var meetings = dbase.Meetings.Include(o => o.Topics)
-                .Include(o => o.Delegates)
+            var meetings = dbase.Meetings
+                .Include(o => o.Delegates.Where(d => !d.IsDeleted))
                 .Include(o => o.Author)
-                .Include(o => o.Topics).ThenInclude(t => t.Sessions).ThenInclude(a => a.AllocatedParticipants).ToList();
+                .Include(o => o.Topics.Where(t => !t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s => !s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p => !p.IsDeleted)).Where(o=>!o.IsDeleted);
             var allAuthorMeetings = meetings.Where(o => o.Author == participant).ToList();
             var allDelegateMeetings = meetings.Where(o=>o.Delegates.Contains(participant)).ToList();
             var allAllocatedMeetings = meetings.Where(meeting => meeting.Topics.Where(topic => topic.Sessions.Where(session => session.AllocatedParticipants.Contains(participant)).ToList().Count != 0).ToList().Count != 0).ToList();
@@ -43,7 +44,7 @@ namespace EasyMinutesServer.Models
             allMeetings.AddRange(allAuthorMeetings);
             allMeetings.AddRange(allDelegateMeetings);
             allMeetings.AddRange(allAllocatedMeetings);
-            return allMeetings.Where(o => !o.IsDeleted).Distinct().OrderBy(o=>o.DisplayOrder).ToList();
+            return allMeetings.Distinct().OrderBy(o=>o.DisplayOrder).ToList();
         }
 
         internal MeetingCx? GetMeeting(int meetingId)
@@ -52,8 +53,7 @@ namespace EasyMinutesServer.Models
             var meetings = dbase.Meetings
                 .Include(o => o.Delegates.Where(d => !d.IsDeleted))
                 .Include(o => o.Author)
-                .Include(o => o.Topics.Where(t=>!t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s=>!s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p=>!p.IsDeleted));
-            var meeting = meetings.FirstOrDefault(o => o.Id == meetingId);
+                .Include(o => o.Topics.Where(t=>!t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s=>!s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p=>!p.IsDeleted)).Where(o => !o.IsDeleted);
             return meetings.FirstOrDefault(o => o.Id == meetingId);
         }
 
@@ -784,7 +784,7 @@ namespace EasyMinutesServer.Models
         }
 
         #endregion
-        internal void DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds)
+        internal string DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds, bool isPreview = false)
         {
             List<ParticipantCx> filteredParticipants = new();
 
@@ -821,27 +821,34 @@ namespace EasyMinutesServer.Models
                 body = body.Replace("<<TABLE>>", minutesHtmlTable);
                 var pin = CreatePin(filteredParticipant);
                 body = body.Replace("<<PIN>>", pin.Value);
-                body = body.Replace("<<UNSUBSCRIBE_URL>>", $"{Constants.ServerUrl}/api/signup/UnSubscribe?id={filteredParticipant.Id}"); 
+                body = body.Replace("<<UNSUBSCRIBE_URL>>", $"{Constants.ServerUrl}/api/signup/UnSubscribe?id={filteredParticipant.Id}");
+                if (isPreview)
+                {
+                    Debug.WriteLine($"Preview generated and returned");
+                    return body;
+                }
                 mailWorker.ScheduleMail(meeting.Name, filteredParticipant.Email, body);
             }
 
             Debug.WriteLine($"Meeting succesfully distributed");
+            return "";
         }
 
         private static string GenerateDistributionHtmlBodyTemplate()
         {
             var template = @$"
                 Hi <<USERNAME>><br><br>
-                Here is the latest meeting minutes for date: {DateTime.Now:d}<br><br>
-                Meeting: <<MEETING_NAME>><br><br>
-                The topics allocated to you are highlited in <span style='color: Tomato; '>RED</span><br>
+                Meeting: <<MEETING_NAME>>.<br><br>
+                Here is the latest meeting minutes dated {DateTime.Now:d}.<br><br>
+                The topics allocated to you are highlited in <span style='color: Tomato; '>RED</span>.<br>
                 <br>
                 <<TABLE>><br>
                 <br>
-                Regards<br>
-                The EasyMinutes administrator<br>
-                <br>
-                Note: You can view the same information in the mobile app by downloading it from the app store. If not yet signed up, just sign in using PIN: <<PIN>><br>
+                Regards.<br><br>
+                The EasyMinutes administrator.<br>
+                <br><br>
+                Notes:<br><br> 
+                You can view the same information in the mobile app by downloading it from the app store. If not yet signed up, just sign in using PIN: <<PIN>>.<br><br>
                 To unsubscribe receiving these emails, just click on this <a href=""<<UNSUBSCRIBE_URL>>"">link</a>
                 ";
             return template;
@@ -898,7 +905,7 @@ namespace EasyMinutesServer.Models
                     });
                 }
                 table.EndHead();
-                table.StartBody();
+                table.StartBody(id: "fontsize");
                 foreach (var topic in topics)
                 {
                     var tr = table.AddRow(classAttributes: "someattributes");
@@ -926,6 +933,11 @@ namespace EasyMinutesServer.Models
                 table.EndBody();
             }
             return sb.ToString();
+        }
+
+        internal string PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds)
+        {
+            return DistributeMeeting(meetingId, distributeFilterOption, participantIds, true);
         }
 
         internal static void ServerTest()

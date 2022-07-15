@@ -1079,6 +1079,40 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
+        public class PreviewDistributedMeetingMC
+        {
+            public class Command
+            {
+                public int MeetingId { get; set; } = 0;
+                public DistributeFilterOptions DistributeFilterOption { get; set; } = DistributeFilterOptions.All;
+                public List<int> ParticipantIds { get; set; } = new();
+            }
+
+            public class Response : ResponseBase
+            {
+                public string MailHtml { get; set; } = "";
+            }
+        }
+
+#if __CLIENT__
+        internal async Task<string> PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds, CancellationTokenSource cts)
+        {
+            return (await SendMessage<PreviewDistributedMeetingMC.Command, PreviewDistributedMeetingMC.Response>(new PreviewDistributedMeetingMC.Command { MeetingId = meetingId, DistributeFilterOption = distributeFilterOption, ParticipantIds = participantIds }, nameof(PreviewDistributedMeeting), cts))?.MailHtml??"";
+        }
+#else
+        [HttpPost]
+        public async Task<ActionResult<PreviewDistributedMeetingMC.Response>> PreviewDistributedMeeting([FromBody] PreviewDistributedMeetingMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                var mailHtml = minutesModel.PreviewDistributedMeeting(command.MeetingId, command.DistributeFilterOption, command.ParticipantIds);
+                return new PreviewDistributedMeetingMC.Response { MailHtml = mailHtml };
+            });
+
+            return AcceptedAtAction(nameof(PreviewDistributedMeeting), response);
+        }
+#endif
+
+
         public class UpdateDelegatesMC
         {
             public class Command
@@ -1433,6 +1467,8 @@ namespace EasyMinutesServer.Shared
 
 
 
+
+
 #else
         [HttpPost]
         public async Task<ActionResult<SetTopicsCheckedMC.Response>> SetTopicsChecked([FromBody] SetTopicsCheckedMC.Command command)
@@ -1445,6 +1481,11 @@ namespace EasyMinutesServer.Shared
             return AcceptedAtAction(nameof(SetTopicsChecked), response);
         }
 #endif
+
+
+
+
+
 
 #if __CLIENT__
 
