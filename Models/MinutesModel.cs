@@ -213,10 +213,20 @@ namespace EasyMinutesServer.Models
             }
 
             meeting.Topics.Add(topic);
-            topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = DateTimeOffset.Now, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
+            var newestSession = GetNewestSession(meeting);
+            topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = newestSession.DateTimeStamp, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
             dbase.SaveChanges();
 
             return topic;
+        }
+
+        private TopicSessionCx GetNewestSession(MeetingCx meeting)
+        {
+            var sessions = meeting.Topics.SelectMany(o => o.Sessions).ToList();
+            sessions.OrderBy(o => o.DateTimeStamp);
+            return sessions.OrderBy(o => o.DateTimeStamp).Last();
+
+
         }
 
         private static void InsertAfterTopic(MeetingCx meeting, TopicCx beforeTopic, TopicCx topic)
@@ -858,7 +868,7 @@ namespace EasyMinutesServer.Models
         {
             public int TopicId;
             public DateTimeOffset SessionDataTimeStamp;
-            public string? SessionDetails;
+            public string? SessionText;
             public bool IsFiltered;
         }
 
@@ -877,7 +887,29 @@ namespace EasyMinutesServer.Models
                 {
                     bool isFiltered = session.AllocatedParticipants.Exists(o=>o.Id == filteredParticipant.Id);
 
-                    cellDatas.Add(new CellData { TopicId = topic.Id, SessionDataTimeStamp = session.DateTimeStamp, SessionDetails = session.Details, IsFiltered = isFiltered });
+                    var partipantsText = "";
+                    foreach (var participant in session.AllocatedParticipants)
+                    {
+                        if (partipantsText == "")
+                        {
+                            partipantsText = $"<small>({participant.Name}";
+                        }
+                        else
+                        {
+                            partipantsText += $",<br>{participant.Name}";
+                        }
+                    }
+                    var sessionText = "";
+                    if (partipantsText != "") {
+                        partipantsText += ")</small>";
+                        sessionText = $"<div>{session.Details}<br>{partipantsText}</div>";
+                    }
+                    else
+                    {
+                        sessionText = session.Details;
+                    }
+
+                    cellDatas.Add(new CellData { TopicId = topic.Id, SessionDataTimeStamp = session.DateTimeStamp, SessionText = sessionText, IsFiltered = isFiltered });
                 }
             }
             headingDateTimeStamps = cellDatas.OrderByDescending(o => o.SessionDataTimeStamp).Select(o=>o.SessionDataTimeStamp).Distinct().Take(7).ToList();
@@ -921,11 +953,11 @@ namespace EasyMinutesServer.Models
                         {
                             if (!cell.IsFiltered)
                             {
-                                tr.AddCell(cell.SessionDetails ?? "");
+                                tr.AddCell(cell.SessionText ?? "");
                             }
                             else
                             {
-                                tr.AddCell(cell.SessionDetails ?? "", id: "selected");
+                                tr.AddCell(cell.SessionText ?? "", id: "selected");
                             }
                         }
                     }

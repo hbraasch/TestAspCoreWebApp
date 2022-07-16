@@ -3,6 +3,7 @@ using System;
 using EasyMinutesServer.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EasyMinutesServer.Data
 {
     [DbContext(typeof(DbaseContext))]
-    partial class DbaseContextModelSnapshot : ModelSnapshot
+    [Migration("20220716031331_Next1")]
+    partial class Next1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "6.0.6");
@@ -25,9 +27,6 @@ namespace EasyMinutesServer.Data
 
                     b.Property<int?>("AuthorId")
                         .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset>("CreationDateTimeStamp")
-                        .HasColumnType("TEXT");
 
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("INTEGER");

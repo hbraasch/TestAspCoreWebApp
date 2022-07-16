@@ -93,7 +93,7 @@ namespace EasyMinutesServer.Shared
                     }
                     else
                     {
-                        throw new ApplicationException($"Problem in {nameof(SendMessage)}: {response.ReasonPhrase}");
+                        throw new ApplicationException($"Notice in {nameof(SendMessage)}: {response.ReasonPhrase}");
                     }
                 }
                 else
@@ -119,7 +119,7 @@ namespace EasyMinutesServer.Shared
             }
             catch (Exception ex)
             {
-                throw new ApplicationException($"Problem in {nameof(SendMessage)}", ex);
+                throw new ApplicationException($"Notice in {nameof(SendMessage)}", ex);
             }
         }
 

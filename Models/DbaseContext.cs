@@ -76,6 +76,7 @@ namespace EasyMinutesServer.Models
             public bool IsDeleted { get; set; }
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
+            public DateTimeOffset CreationDateTimeStamp { get; set; } = ConstantsGlobal.DateMinValue;
 
             public virtual List<TopicCx> Topics { get; set; } = new List<TopicCx>();
 
