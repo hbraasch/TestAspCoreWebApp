@@ -214,16 +214,17 @@ namespace EasyMinutesServer.Models
 
             meeting.Topics.Add(topic);
             var newestSession = GetNewestSession(meeting);
-            topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = newestSession.DateTimeStamp, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
+            topic.Sessions.Add(new TopicSessionCx { Version = 1, DateTimeStamp = newestSession?.DateTimeStamp??DateTimeOffset.Now, ToBeCompletedDate = ConstantsGlobal.DateMinValue });
             dbase.SaveChanges();
 
             return topic;
         }
 
-        private TopicSessionCx GetNewestSession(MeetingCx meeting)
+        private TopicSessionCx? GetNewestSession(MeetingCx meeting)
         {
             var sessions = meeting.Topics.SelectMany(o => o.Sessions).ToList();
             sessions.OrderBy(o => o.DateTimeStamp);
+            if (sessions.Count == 0) return null;
             return sessions.OrderBy(o => o.DateTimeStamp).Last();
 
 

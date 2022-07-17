@@ -32,6 +32,12 @@
             public int ParentId { get; set; }
 
             public List<TopicSession> Sessions { get; set; } = new List<TopicSession>();
+
+            internal List<Participant> CurrentAllocatedParticipants()
+            {
+                var currentSession = Sessions.OrderBy(o=>o.DateTimeStamp).Last();
+                return currentSession.AllocatedParticipants ?? new();
+            }
         }
 
         public class TopicSession
