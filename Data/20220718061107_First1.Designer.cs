@@ -4,6 +4,7 @@ using EasyMinutesServer.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EasyMinutesServer.Data
 {
     [DbContext(typeof(DbaseContext))]
-    partial class DbaseContextModelSnapshot : ModelSnapshot
+    [Migration("20220718061107_First1")]
+    partial class First1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -201,9 +203,6 @@ namespace EasyMinutesServer.Data
                         .HasColumnType("int");
 
                     b.Property<int>("MasterId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Id")
                         .HasColumnType("int");
 
                     b.Property<int?>("UserCxId")

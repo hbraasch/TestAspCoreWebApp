@@ -12,13 +12,13 @@
         {
             public int Id { get; set; }
             public string Name { get; set; } = "";
-            public Participant? Author { get; set; }
+            public User? Author { get; set; }
             public bool IsDeleted { get; set; }
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
 
             public List<Topic> Topics { get; set; } = new List<Topic>();
-            public List<Participant> Delegates { get; set; } = new List<Participant>(); 
+            public List<User> Delegates { get; set; } = new List<User>(); 
         }
 
         public class Topic
@@ -33,7 +33,7 @@
 
             public List<TopicSession> Sessions { get; set; } = new List<TopicSession>();
 
-            internal List<Participant> CurrentAllocatedParticipants()
+            internal List<User> CurrentAllocatedParticipants()
             {
                 var currentSession = Sessions.OrderBy(o=>o.DateTimeStamp).Last();
                 return currentSession.AllocatedParticipants ?? new();
@@ -52,11 +52,11 @@
 
             public bool IsDeleted { get; set; }
 
-            public List<Participant> AllocatedParticipants { get; set; } = new List<Participant>();
+            public List<User> AllocatedParticipants { get; set; } = new List<User>();
 
         }
 
-        public class Participant
+        public class User
         {
             public int Id { get; set; }
             public string Name { get; set; } = "";
@@ -77,9 +77,9 @@
             public override bool Equals(object? obj)
             {
                 if (obj == null) return false;
-                if (obj is not Participant) return false;
+                if (obj is not User) return false;
 
-                return this.Id.Equals(((Participant)obj).Id);
+                return this.Id.Equals(((User)obj).Id);
             }
 
             public override int GetHashCode()

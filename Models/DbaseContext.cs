@@ -17,14 +17,14 @@ namespace EasyMinutesServer.Models
             Meetings = Set<MeetingCx>();
             Topics = Set<TopicCx>();
             Sessions = Set<TopicSessionCx>();
-            Participants = Set<ParticipantCx>();
+            Users = Set<UserCx>();
             Pins= Set<PinCx>();
         }
 
         public DbSet<MeetingCx> Meetings { get; set; }
         public DbSet<TopicCx> Topics { get; set; }
         public DbSet<TopicSessionCx> Sessions { get; set; }
-        public DbSet<ParticipantCx> Participants { get; set; }
+        public DbSet<UserCx> Users { get; set; }
         public DbSet<PinCx> Pins { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -44,20 +44,20 @@ namespace EasyMinutesServer.Models
                 .HasForeignKey(s => s.TopicId);
 
             modelBuilder.Entity<TopicSessionCx>()
-                .HasMany<ParticipantCx>(s => s.AllocatedParticipants)
+                .HasMany<UserCx>(s => s.AllocatedParticipants)
                 .WithMany(g => g.AllocatedSessions);
 
 
-            modelBuilder.Entity<ParticipantMasterSlave>()
+            modelBuilder.Entity<UserMasterSlave>()
                 .HasKey(ms => new { ms.SlaveId, ms.MasterId });
 
-            modelBuilder.Entity<ParticipantMasterSlave>()
+            modelBuilder.Entity<UserMasterSlave>()
                .HasOne(c => c.Slave)
                .WithMany() // <-- one of this must be empty
                .HasForeignKey(pc => pc.SlaveId)
                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<ParticipantMasterSlave>()
+            modelBuilder.Entity<UserMasterSlave>()
                .HasOne(c => c.Master)
                .WithMany(p => p.Masters)
                .HasForeignKey(pc => pc.MasterId);
@@ -72,7 +72,7 @@ namespace EasyMinutesServer.Models
             [Key]
             public int Id { get; set; }
             public string Name { get; set; } = "";
-            public ParticipantCx? Author { get; set; }
+            public UserCx? Author { get; set; }
             public bool IsDeleted { get; set; }
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
@@ -80,7 +80,7 @@ namespace EasyMinutesServer.Models
 
             public virtual List<TopicCx> Topics { get; set; } = new List<TopicCx>();
 
-            public virtual List<ParticipantCx> Delegates { get; set; } = new List<ParticipantCx>();
+            public virtual List<UserCx> Delegates { get; set; } = new List<UserCx>();
 
             public Meeting FromDb()
             {
@@ -131,7 +131,7 @@ namespace EasyMinutesServer.Models
             public int TopicId { get; set; }
             public TopicCx? Topic {get;set;}
 
-            public virtual List<ParticipantCx> AllocatedParticipants { get; set; } = new List<ParticipantCx>();
+            public virtual List<UserCx> AllocatedParticipants { get; set; } = new List<UserCx>();
 
             public TopicSession FromDb()
             {
@@ -140,7 +140,7 @@ namespace EasyMinutesServer.Models
 
         }
 
-        public class ParticipantCx
+        public class UserCx
         {
 
 
@@ -154,23 +154,23 @@ namespace EasyMinutesServer.Models
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
             public bool IsUnsubscribed { get; set; } = false;
-            public virtual ICollection<ParticipantMasterSlave> Masters { get; set; } = new List<ParticipantMasterSlave>();
-            public virtual ICollection<ParticipantMasterSlave> Slaves { get; set; } = new List<ParticipantMasterSlave>();
+            public virtual ICollection<UserMasterSlave> Masters { get; set; } = new List<UserMasterSlave>();
+            public virtual ICollection<UserMasterSlave> Slaves { get; set; } = new List<UserMasterSlave>();
             public virtual ICollection<MeetingCx> EditableMeetings { get; set; } = new List<MeetingCx>();
             public virtual ICollection<TopicSessionCx> AllocatedSessions { get; set; } = new List<TopicSessionCx>();
             public virtual ICollection<PinCx> Pins { get; set; } = new List<PinCx>();
 
-            public Participant FromDb()
+            public User FromDb()
             {
-                return new Participant { Id = Id, Name = Name, Password = Password, Email = Email, IsDeleted = IsDeleted, AccessPin = AccessPin, IsChecked = IsChecked, DisplayOrder = DisplayOrder, IsEmailConfirmed = IsEmailConfirmed, IsUnsubscribed = IsUnsubscribed};
+                return new User { Id = Id, Name = Name, Password = Password, Email = Email, IsDeleted = IsDeleted, AccessPin = AccessPin, IsChecked = IsChecked, DisplayOrder = DisplayOrder, IsEmailConfirmed = IsEmailConfirmed, IsUnsubscribed = IsUnsubscribed};
             }
 
             public override bool Equals(object? obj)
             {
                 if (obj == null) return false;
-                if (obj is not ParticipantCx) return false;
+                if (obj is not UserCx) return false;
 
-                return this.Id.Equals(((ParticipantCx)obj).Id);
+                return this.Id.Equals(((UserCx)obj).Id);
             }
 
             public override int GetHashCode()
@@ -180,13 +180,14 @@ namespace EasyMinutesServer.Models
 
         }
 
-        public class ParticipantMasterSlave
+        public class UserMasterSlave
         {
+            public int Id { get; set; }
             public int SlaveId { get; set; }
             public int MasterId { get; set; }
 
-            public virtual ParticipantCx Slave { get; set; }
-            public virtual ParticipantCx Master { get; set; }
+            public virtual UserCx Slave { get; set; }
+            public virtual UserCx Master { get; set; }
         }
 
         public class PinCx
@@ -195,8 +196,8 @@ namespace EasyMinutesServer.Models
             public string Value { get; set; } = "";
             public DateTimeOffset DateTimeStamp { get; set; }
             public bool IsValid => DateTimeStamp > DateTimeOffset.Now.AddDays(-ConstantsGlobal.PinTimeoutInDays);
-            public int ParticipantId { get; set; }
-            public virtual ParticipantCx? Participant { get; set; }
+            public int UserId { get; set; }
+            public virtual UserCx? User { get; set; }
         }
 
     }
@@ -225,9 +226,9 @@ namespace EasyMinutesServer.Models
             return convert;
         }
 
-        public static List<Participant> FromDb(this List<ParticipantCx> list)
+        public static List<User> FromDb(this List<UserCx> list)
         {
-            var convert = new List<Participant>();
+            var convert = new List<User>();
             list.ForEach(o => convert.Add(o.FromDb()));
             return convert;
         }

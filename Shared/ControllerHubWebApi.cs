@@ -28,7 +28,7 @@ namespace EasyMinutesServer.Shared
         bool isServerSecure = true;
         string serverName = "";
         string serverPort = "";
-        int serverTimeoutInSec = 100;
+        readonly int serverTimeoutInSec = 100;
 
         public ControllerHubProxy(bool isServerSecure, string serverName, string serverPort, int serverTimeoutInSec)
         {
@@ -536,65 +536,65 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
-        public class GetParticipantMC
+        public class GetUserMC
         {
             public class Command
             {
-                public int ParticipantId { get; set; }
+                public int UserId { get; set; }
             }
 
             public class Response : ResponseBase
             {
-                public Participant? Participant { get; set; }
+                public User? User { get; set; }
             }
         }
 
 #if __CLIENT__
-        internal async Task<Participant?> GetParticipant(int participantId, CancellationTokenSource cts)
+        internal async Task<User?> GetUser(int userId, CancellationTokenSource cts)
         {
-            return (await SendMessage<GetParticipantMC.Command, GetParticipantMC.Response>(new GetParticipantMC.Command { ParticipantId = participantId }, nameof(GetParticipant), cts))?.Participant;
+            return (await SendMessage<GetUserMC.Command, GetUserMC.Response>(new GetUserMC.Command { UserId = userId }, nameof(GetUser), cts))?.User;
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<GetParticipantMC.Response>> GetParticipant([FromBody] GetParticipantMC.Command command)
+        public async Task<ActionResult<GetUserMC.Response>> GetUser([FromBody] GetUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var participant = minutesModel.GetParticipant(command.ParticipantId)?.FromDb();
-                return new GetParticipantMC.Response { Participant = participant };
+                var user = minutesModel.GetUser(command.UserId)?.FromDb();
+                return new GetUserMC.Response { User = user };
             });
 
-            return AcceptedAtAction(nameof(GetParticipant), response);
+            return AcceptedAtAction(nameof(GetUser), response);
         }
 #endif
 
-        public class GetParticipantsMC
+        public class GetOwnerUsersMC
         {
             public class Command
             {
-                public int AuthorId { get; set; }
+                public int OwnerId { get; set; }
             }
 
             public class Response : ResponseBase
             {
-                public List<Participant> Participants { get; set; } = new();
+                public List<User> Users { get; set; } = new();
             }
         }
 
 #if __CLIENT__
-        internal async Task<List<Participant>> GetParticipants(int authorId, CancellationTokenSource cts)
+        internal async Task<List<User>> GetOwnerUsers(int ownerId, CancellationTokenSource cts)
         {
-            return (await SendMessage<GetParticipantsMC.Command, GetParticipantsMC.Response>(new GetParticipantsMC.Command { AuthorId = authorId }, nameof(GetParticipants), cts))?.Participants??new();
+            return (await SendMessage<GetOwnerUsersMC.Command, GetOwnerUsersMC.Response>(new GetOwnerUsersMC.Command { OwnerId = ownerId }, nameof(GetOwnerUsers), cts))?.Users ?? new();
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<GetParticipantsMC.Response>> GetParticipants([FromBody] GetParticipantsMC.Command command)
+        public async Task<ActionResult<GetOwnerUsersMC.Response>> GetOwnerUsers([FromBody] GetOwnerUsersMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var participants = minutesModel.GetParticipants(command.AuthorId)?.FromDb();
-                return new GetParticipantsMC.Response { Participants = participants??new() };
+                var users = minutesModel.GetOwnerUsers(command.OwnerId)?.FromDb();
+                return new GetOwnerUsersMC.Response { Users = users??new() };
             });
 
-            return AcceptedAtAction(nameof(GetParticipants), response);
+            return AcceptedAtAction(nameof(GetOwnerUsers), response);
         }
 #endif
         public class GetSessionParticipantsMC
@@ -606,11 +606,11 @@ namespace EasyMinutesServer.Shared
 
             public class Response : ResponseBase
             {
-                public List<Participant> Participants { get; set; } = new ();
+                public List<User> Participants { get; set; } = new ();
             }
         }
 #if __CLIENT__
-        internal async Task<List<Participant>> GetSessionParticipants(int sessionId, CancellationTokenSource cts)
+        internal async Task<List<User>> GetSessionParticipants(int sessionId, CancellationTokenSource cts)
         {
             return (await SendMessage<GetSessionParticipantsMC.Command, GetSessionParticipantsMC.Response>(new GetSessionParticipantsMC.Command { SessionId = sessionId }, nameof(GetSessionParticipants), cts))?.Participants??new();
         }
@@ -785,7 +785,7 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
-        public class AddParticipantMC
+        public class AddUserMC
         {
             public class Command
             {
@@ -796,33 +796,33 @@ namespace EasyMinutesServer.Shared
 
             public class Response : ResponseBase
             {
-                public Participant? Participant { get; set; }
+                public User? User { get; set; }
             }
         }
 
 #if __CLIENT__
-        internal async Task<Participant?> AddParticipant(string email, string name, string password, CancellationTokenSource cts)
+        internal async Task<User?> AddUser(string email, string name, string password, CancellationTokenSource cts)
         {
-            return (await SendMessage<AddParticipantMC.Command, AddParticipantMC.Response>(new AddParticipantMC.Command { Email = email, Name = name, Password = password }, nameof(AddParticipant), cts))?.Participant;
+            return (await SendMessage<AddUserMC.Command, AddUserMC.Response>(new AddUserMC.Command { Email = email, Name = name, Password = password }, nameof(AddUser), cts))?.User;
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<AddParticipantMC.Response>> AddParticipant([FromBody] AddParticipantMC.Command command)
+        public async Task<ActionResult<AddUserMC.Response>> AddUser([FromBody] AddUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var participant = minutesModel.AddParticipant(command.Email, command.Name, command.Password).FromDb();
-                return new AddParticipantMC.Response { Participant = participant };
+                var user = minutesModel.AddUser(command.Email, command.Name, command.Password).FromDb();
+                return new AddUserMC.Response { User = user };
             });
 
-            return AcceptedAtAction(nameof(AddParticipant), response);
+            return AcceptedAtAction(nameof(AddUser), response);
         }
 #endif
 
-        public class UpdateParticipantMC
+        public class UpdateUserMC
         {
             public class Command
             {
-                public int ParticipantId { get; set; }
+                public int UserId { get; set; }
                 public string Email { get; set; } = "";
                 public string Name { get; set; } = "";
                 public string Password { get; set; } = "";
@@ -835,28 +835,28 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task UpdateParticipant(int participantId, string email, string name, string password, CancellationTokenSource cts)
+        internal async Task UpdateUser(int userId, string email, string name, string password, CancellationTokenSource cts)
         {
-            await SendMessage<UpdateParticipantMC.Command, UpdateParticipantMC.Response>(new UpdateParticipantMC.Command { ParticipantId = participantId, Email = email, Name = name, Password = password }, nameof(UpdateParticipant), cts);
+            await SendMessage<UpdateUserMC.Command, UpdateUserMC.Response>(new UpdateUserMC.Command { UserId = userId, Email = email, Name = name, Password = password }, nameof(UpdateUser), cts);
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<UpdateParticipantMC.Response>> UpdateParticipant([FromBody] UpdateParticipantMC.Command command)
+        public async Task<ActionResult<UpdateUserMC.Response>> UpdateUser([FromBody] UpdateUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.UpdateParticipant(command.ParticipantId, command.Email, command.Name, command.Password);
-                return new UpdateParticipantMC.Response { };
+                minutesModel.UpdateUser(command.UserId, command.Email, command.Name, command.Password);
+                return new UpdateUserMC.Response { };
             });
 
-            return AcceptedAtAction(nameof(UpdateParticipant), response);
+            return AcceptedAtAction(nameof(UpdateUser), response);
         }
 #endif
 
-        public class DeleteParticipantMC
+        public class DeleteUserMC
         {
             public class Command
             {
-                public int ParticipantId { get; set; }
+                public int UserId { get; set; }
             }
 
             public class Response : ResponseBase
@@ -866,20 +866,20 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task DeleteParticipant(int participantId, CancellationTokenSource cts)
+        internal async Task DeleteUser(int UserId, CancellationTokenSource cts)
         {
-            await SendMessage<DeleteParticipantMC.Command, DeleteParticipantMC.Response>(new DeleteParticipantMC.Command { ParticipantId = participantId }, nameof(DeleteParticipant), cts);
+            await SendMessage<DeleteUserMC.Command, DeleteUserMC.Response>(new DeleteUserMC.Command { UserId = UserId }, nameof(DeleteUser), cts);
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<DeleteParticipantMC.Response>> DeleteParticipant([FromBody] DeleteParticipantMC.Command command)
+        public async Task<ActionResult<DeleteUserMC.Response>> DeleteUser([FromBody] DeleteUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.DeleteParticipant(command.ParticipantId);
-                return new DeleteParticipantMC.Response { };
+                minutesModel.DeleteUser(command.UserId);
+                return new DeleteUserMC.Response { };
             });
 
-            return AcceptedAtAction(nameof(DeleteParticipant), response);
+            return AcceptedAtAction(nameof(DeleteUser), response);
         }
 #endif
 
@@ -927,24 +927,24 @@ namespace EasyMinutesServer.Shared
 
             public class Response : ResponseBase
             {
-                public Participant? Participant { get; set; }
+                public User? User { get; set; }
                 public string Instruction { get; set; } = "";
             }
         }
 
 #if __CLIENT__
-        internal async Task<(Participant? participant, string errorMessage)> SignIn(string email, string password, CancellationTokenSource cts)
+        internal async Task<(User? user, string errorMessage)> SignIn(string email, string password, CancellationTokenSource cts)
         {
             var result = await SendMessage<SignInMC.Command, SignInMC.Response>(new SignInMC.Command { Email = email, Password = password }, nameof(SignIn), cts);
-            return (result?.Participant, result?.Instruction??"Low level error");
+            return (result?.User, result?.Instruction??"Low level error");
         }
 #else
         [HttpPost]
         public async Task<ActionResult<SignInMC.Response>> SignIn([FromBody] SignInMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var (participant, errorMessage) = minutesModel.SignIn(command.Email, command.Password);
-                return new SignInMC.Response { Participant = participant?.FromDb(), Instruction = errorMessage };
+                var (user, errorMessage) = minutesModel.SignIn(command.Email, command.Password);
+                return new SignInMC.Response { User = user?.FromDb(), Instruction = errorMessage };
             });
 
             return AcceptedAtAction(nameof(SignIn), response);
@@ -959,24 +959,24 @@ namespace EasyMinutesServer.Shared
 
             public class Response : ResponseBase
             {
-                public Participant? Participant { get; set; }
+                public User? User { get; set; }
                 public string Instruction { get; set; } = "";
             }
         }
 
 #if __CLIENT__
-        internal async Task<(Participant? participant, string errorMessage)> SignInUsingPin(string pin, CancellationTokenSource cts)
+        internal async Task<(User? User, string errorMessage)> SignInUsingPin(string pin, CancellationTokenSource cts)
         {
             var result = await SendMessage<SignInUsingPinMC.Command, SignInUsingPinMC.Response>(new SignInUsingPinMC.Command { Pin = pin}, nameof(SignInUsingPin), cts);
-            return (result?.Participant, result?.Instruction ?? "Low level error");
+            return (result?.User, result?.Instruction ?? "Low level error");
         }
 #else
         [HttpPost]
         public async Task<ActionResult<SignInUsingPinMC.Response>> SignInUsingPin([FromBody] SignInUsingPinMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var (participant, errorMessage) = minutesModel.SignIn(command.Pin);
-                return new SignInUsingPinMC.Response { Participant = participant?.FromDb(), Instruction = errorMessage };
+                var (user, errorMessage) = minutesModel.SignIn(command.Pin);
+                return new SignInUsingPinMC.Response { User = user?.FromDb(), Instruction = errorMessage };
             });
 
             return AcceptedAtAction(nameof(SignInUsingPin), response);
@@ -1052,7 +1052,7 @@ namespace EasyMinutesServer.Shared
             {
                 public int MeetingId { get; set; } = 0;
                 public DistributeFilterOptions DistributeFilterOption { get; set; } = DistributeFilterOptions.All;
-                public List<int> ParticipantIds { get; set; } = new();
+                public List<int> UserIds { get; set; } = new();
             }
 
             public class Response : ResponseBase
@@ -1062,16 +1062,16 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds, CancellationTokenSource cts)
+        internal async Task DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, CancellationTokenSource cts)
         {
-            await SendMessage<DistributeMeetingMC.Command, DistributeMeetingMC.Response>(new DistributeMeetingMC.Command { MeetingId = meetingId,DistributeFilterOption = distributeFilterOption, ParticipantIds = participantIds  }, nameof(DistributeMeeting), cts);
+            await SendMessage<DistributeMeetingMC.Command, DistributeMeetingMC.Response>(new DistributeMeetingMC.Command { MeetingId = meetingId,DistributeFilterOption = distributeFilterOption, UserIds = userIds  }, nameof(DistributeMeeting), cts);
         }
 #else
         [HttpPost]
         public async Task<ActionResult<DistributeMeetingMC.Response>> DistributeMeeting([FromBody] DistributeMeetingMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.DistributeMeeting(command.MeetingId, command.DistributeFilterOption, command.ParticipantIds);
+                minutesModel.DistributeMeeting(command.MeetingId, command.DistributeFilterOption, command.UserIds);
                 return new DistributeMeetingMC.Response { };
             });
 
@@ -1085,7 +1085,7 @@ namespace EasyMinutesServer.Shared
             {
                 public int MeetingId { get; set; } = 0;
                 public DistributeFilterOptions DistributeFilterOption { get; set; } = DistributeFilterOptions.All;
-                public List<int> ParticipantIds { get; set; } = new();
+                public List<int> UserIds { get; set; } = new();
             }
 
             public class Response : ResponseBase
@@ -1095,16 +1095,16 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<string> PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds, CancellationTokenSource cts)
+        internal async Task<string> PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, CancellationTokenSource cts)
         {
-            return (await SendMessage<PreviewDistributedMeetingMC.Command, PreviewDistributedMeetingMC.Response>(new PreviewDistributedMeetingMC.Command { MeetingId = meetingId, DistributeFilterOption = distributeFilterOption, ParticipantIds = participantIds }, nameof(PreviewDistributedMeeting), cts))?.MailHtml??"";
+            return (await SendMessage<PreviewDistributedMeetingMC.Command, PreviewDistributedMeetingMC.Response>(new PreviewDistributedMeetingMC.Command { MeetingId = meetingId, DistributeFilterOption = distributeFilterOption, UserIds = userIds }, nameof(PreviewDistributedMeeting), cts))?.MailHtml??"";
         }
 #else
         [HttpPost]
         public async Task<ActionResult<PreviewDistributedMeetingMC.Response>> PreviewDistributedMeeting([FromBody] PreviewDistributedMeetingMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var mailHtml = minutesModel.PreviewDistributedMeeting(command.MeetingId, command.DistributeFilterOption, command.ParticipantIds);
+                var mailHtml = minutesModel.PreviewDistributedMeeting(command.MeetingId, command.DistributeFilterOption, command.UserIds);
                 return new PreviewDistributedMeetingMC.Response { MailHtml = mailHtml };
             });
 
@@ -1274,11 +1274,11 @@ namespace EasyMinutesServer.Shared
             return AcceptedAtAction(nameof(SetTopicChecked), response);
         }
 #endif
-        public class GetParticipantIdMC
+        public class GetUserIdMC
         {
             public class Command
             {
-                public string ParticipantEmail { get; set; } = "";
+                public string UserEmail { get; set; } = "";
             }
 
             public class Response : ResponseBase
@@ -1288,9 +1288,9 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<int> GetParticipantId(string participantEmail, CancellationTokenSource cts)
+        internal async Task<int> GetUserId(string userEmail, CancellationTokenSource cts)
         {
-            return (await SendMessage<GetParticipantIdMC.Command, GetParticipantIdMC.Response>(new GetParticipantIdMC.Command { ParticipantEmail = participantEmail }, nameof(GetParticipantId), cts))?.Id??0;
+            return (await SendMessage<GetUserIdMC.Command, GetUserIdMC.Response>(new GetUserIdMC.Command { UserEmail = userEmail }, nameof(GetUserId), cts))?.Id??0;
         }
 
 
@@ -1298,22 +1298,22 @@ namespace EasyMinutesServer.Shared
 
 #else
         [HttpPost]
-        public async Task<ActionResult<GetParticipantIdMC.Response>> GetParticipantId([FromBody] GetParticipantIdMC.Command command)
+        public async Task<ActionResult<GetUserIdMC.Response>> GetUserId([FromBody] GetUserIdMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var id = minutesModel.GetParticipantId(command.ParticipantEmail);
-                return new GetParticipantIdMC.Response { Id = id };
+                var id = minutesModel.GetUserId(command.UserEmail);
+                return new GetUserIdMC.Response { Id = id };
             });
 
-            return AcceptedAtAction(nameof(GetParticipantId), response);
+            return AcceptedAtAction(nameof(GetUserId), response);
         }
 #endif
 
-        public class GetParticipantIdFromNameMC
+        public class GetUserIdFromNameMC
         {
             public class Command
             {
-                public string ParticipantName { get; set; } = "";
+                public string UserName { get; set; } = "";
             }
 
             public class Response : ResponseBase
@@ -1323,9 +1323,9 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<int> GetParticipantIdFromName(string participantName, CancellationTokenSource cts)
+        internal async Task<int> GetUserIdFromName(string UserName, CancellationTokenSource cts)
         {
-            return (await SendMessage<GetParticipantIdFromNameMC.Command, GetParticipantIdFromNameMC.Response>(new GetParticipantIdFromNameMC.Command { ParticipantName = participantName }, nameof(GetParticipantIdFromName), cts))?.Id ?? 0;
+            return (await SendMessage<GetUserIdFromNameMC.Command, GetUserIdFromNameMC.Response>(new GetUserIdFromNameMC.Command { UserName = UserName }, nameof(GetUserIdFromName), cts))?.Id ?? 0;
         }
 
 
@@ -1333,23 +1333,23 @@ namespace EasyMinutesServer.Shared
 
 #else
         [HttpPost]
-        public async Task<ActionResult<GetParticipantIdFromNameMC.Response>> GetParticipantIdFromName([FromBody] GetParticipantIdFromNameMC.Command command)
+        public async Task<ActionResult<GetUserIdFromNameMC.Response>> GetUserIdFromName([FromBody] GetUserIdFromNameMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var id = minutesModel.GetParticipantIdFromName(command.ParticipantName);
-                return new GetParticipantIdFromNameMC.Response { Id = id };
+                var id = minutesModel.GetUserIdFromName(command.UserName);
+                return new GetUserIdFromNameMC.Response { Id = id };
             });
 
-            return AcceptedAtAction(nameof(GetParticipantIdFromName), response);
+            return AcceptedAtAction(nameof(GetUserIdFromName), response);
         }
 #endif
 
-        public class AddParticipantWithIdMC
+        public class AddAddOwnerUserMC
         {
             public class Command
             {
                 public int OwnerId { get; set; } = 0;
-                public int ParticipantId { get; set; } = 0;
+                public int UserId { get; set; } = 0;
             }
 
             public class Response : ResponseBase
@@ -1358,20 +1358,20 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task AddParticipantWithId(int ownerId, int participantId, CancellationTokenSource cts)
+        internal async Task AddOwnerUser(int ownerId, int userId, CancellationTokenSource cts)
         {
-            await SendMessage<AddParticipantWithIdMC.Command, AddParticipantWithIdMC.Response>(new AddParticipantWithIdMC.Command { OwnerId = ownerId, ParticipantId = participantId }, nameof(AddParticipantWithId), cts);
+            await SendMessage<AddAddOwnerUserMC.Command, AddAddOwnerUserMC.Response>(new AddAddOwnerUserMC.Command { OwnerId = ownerId, UserId = userId }, nameof(AddOwnerUser), cts);
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<AddParticipantWithIdMC.Response>> AddParticipantWithId([FromBody] AddParticipantWithIdMC.Command command)
+        public async Task<ActionResult<AddAddOwnerUserMC.Response>> AddOwnerUser([FromBody] AddAddOwnerUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.AddParticipant(command.OwnerId, command.ParticipantId);
-                return new AddParticipantWithIdMC.Response { };
+                minutesModel.AddOwnerUser(command.OwnerId, command.UserId);
+                return new AddAddOwnerUserMC.Response { };
             });
 
-            return AcceptedAtAction(nameof(AddParticipantWithId), response);
+            return AcceptedAtAction(nameof(AddOwnerUser), response);
         }
 #endif
 
@@ -1464,11 +1464,6 @@ namespace EasyMinutesServer.Shared
             await SendMessage<SetTopicsCheckedMC.Command, SetTopicsCheckedMC.Response>(new SetTopicsCheckedMC.Command { MeetingId = meetingId, TopicIds = topicIds  }, nameof(SetTopicsChecked), cts);
         }
 
-
-
-
-
-
 #else
         [HttpPost]
         public async Task<ActionResult<SetTopicsCheckedMC.Response>> SetTopicsChecked([FromBody] SetTopicsCheckedMC.Command command)
@@ -1483,7 +1478,35 @@ namespace EasyMinutesServer.Shared
 #endif
 
 
+        public class ClearDatabaseMC
+        {
+            public class Command
+            {
+            }
 
+            public class Response : ResponseBase
+            {
+            }
+        }
+
+#if __CLIENT__
+        internal async Task ClearDatabase(CancellationTokenSource cts)
+        {
+            await SendMessage<ClearDatabaseMC.Command, ClearDatabaseMC.Response>(new ClearDatabaseMC.Command {}, nameof(ClearDatabase), cts);
+        }
+
+#else
+        [HttpPost]
+        public async Task<ActionResult<ClearDatabaseMC.Response>> ClearDatabase([FromBody] ClearDatabaseMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                minutesModel.ClearDatabase();
+                return new ClearDatabaseMC.Response { };
+            });
+
+            return AcceptedAtAction(nameof(SetTopicsChecked), response);
+        }
+#endif
 
 
 

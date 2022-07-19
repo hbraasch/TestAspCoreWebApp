@@ -2,47 +2,55 @@
 using EasyMinutesServer.Shared;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Text;
 using TreeApps.Maui.Helpers;
 using static EasyMinutesServer.Models.DbaseContext;
 using static EasyMinutesServer.Shared.Dbase;
-using static EasyMinutesServer.Shared.MinutesController;
 
 namespace EasyMinutesServer.Models
 {
     public class MinutesModel
     {
+
+        public bool IsServerRemote => dbase?.Database?.GetConnectionString()?.Contains("Data Source=SQL5080") ?? false;
+
         readonly DbaseContext dbase;
         readonly IMailWorker mailWorker;
 
         public MinutesModel(DbaseContext dbase, IMailWorker mailWorker)
         {
             this.dbase = dbase;
-            dbase.Database.EnsureCreated();
             this.mailWorker = mailWorker;
         }
 
-        #region *// Meeting and topics
-        internal List<MeetingCx> GetMeetings(int participantId)
+        public void ClearDatabase()
         {
-            if (participantId == 0) throw new Exception("Participant id is zero");
-            if (dbase.Meetings == null) return new ();
-            var participant = GetParticipant(participantId);
-            if (participant == null) throw new Exception("Participant does not exist");
+            dbase.Pins.RemoveRange(dbase.Pins);
+            dbase.Sessions.RemoveRange(dbase.Sessions);
+            dbase.Topics.RemoveRange(dbase.Topics);
+            dbase.Users.RemoveRange(dbase.Users);
+            dbase.Meetings.RemoveRange(dbase.Meetings);
+            dbase.SaveChanges();
+        }
+
+        #region *// Meeting and topics
+        internal List<MeetingCx> GetMeetings(int userId)
+        {
+            if (userId == 0) throw new Exception("User id is zero");
+            var user = GetUser(userId);
+            if (user == null) throw new Exception("User does not exist");
             var meetings = dbase.Meetings
                 .Include(o => o.Delegates.Where(d => !d.IsDeleted))
                 .Include(o => o.Author)
                 .Include(o => o.Topics.Where(t => !t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s => !s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p => !p.IsDeleted)).Where(o=>!o.IsDeleted);
-            var allAuthorMeetings = meetings.Where(o => o.Author == participant).ToList();
-            var allDelegateMeetings = meetings.Where(o=>o.Delegates.Contains(participant)).ToList();
-            var allAllocatedMeetings = meetings.Where(meeting => meeting.Topics.Where(topic => topic.Sessions.Where(session => session.AllocatedParticipants.Contains(participant)).ToList().Count != 0).ToList().Count != 0).ToList();
+            var allAuthorMeetings = meetings.Where(o => o.Author == user).ToList();
+            var allDelegatedMeetings = meetings.Where(o=>o.Delegates.Contains(user)).ToList();
+            var allAllocatedMeetings = meetings.Where(meeting => meeting.Topics.Where(topic => topic.Sessions.Where(session => session.AllocatedParticipants.Contains(user)).ToList().Count != 0).ToList().Count != 0).ToList();
             var allMeetings = new List<MeetingCx>();
             allMeetings.AddRange(allAuthorMeetings);
-            allMeetings.AddRange(allDelegateMeetings);
+            allMeetings.AddRange(allDelegatedMeetings);
             allMeetings.AddRange(allAllocatedMeetings);
             return allMeetings.Distinct().OrderBy(o=>o.DisplayOrder).ToList();
         }
@@ -59,7 +67,7 @@ namespace EasyMinutesServer.Models
 
         internal MeetingCx CreateMeeting(int authorId, string meetingName)
         {
-            var author = GetParticipant(authorId);
+            var author = GetUser(authorId);
             if (author == null) throw new Exception("Author does not exist");
             var meetings = GetMeetings(authorId);
             var meeting = new MeetingCx
@@ -79,7 +87,7 @@ namespace EasyMinutesServer.Models
             if (dbase.Meetings == null) throw new Exception("Server dbase table [Meetings] is null");
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting does not exist");
-            var author = GetParticipant(authorId);
+            var author = GetUser(authorId);
             if (author == null) throw new Exception("Author does not exist");
             meeting.Author = author;
             ChangeMeetingDelegates(meeting, delegateIds);
@@ -89,7 +97,7 @@ namespace EasyMinutesServer.Models
 
         private void ChangeMeetingDelegates(MeetingCx meeting, List<int> delegateIds)
 {
-            var updateDelegates = dbase.Participants.Where(p => delegateIds.Contains(p.Id)).ToList();
+            var updateDelegates = dbase.Users.Where(p => delegateIds.Contains(p.Id)).ToList();
             var currentDelegates = meeting.Delegates;
 
             // Remove missing ones
@@ -220,11 +228,11 @@ namespace EasyMinutesServer.Models
             return topic;
         }
 
-        private TopicSessionCx? GetNewestSession(MeetingCx meeting)
+        private static TopicSessionCx? GetNewestSession(MeetingCx meeting)
         {
-            var sessions = meeting.Topics.SelectMany(o => o.Sessions).ToList();
-            sessions.OrderBy(o => o.DateTimeStamp);
-            if (sessions.Count == 0) return null;
+            var sessions = meeting.Topics.SelectMany(o => o.Sessions);
+            sessions = sessions.OrderBy(o => o.DateTimeStamp);
+            if (!sessions.Any()) return null;
             return sessions.OrderBy(o => o.DateTimeStamp).Last();
 
 
@@ -448,7 +456,7 @@ namespace EasyMinutesServer.Models
             if (topic == null) throw new Exception("Topic is null");
             topic.Sessions.Add(newTopicSession);
 
-            SetParticipants(newTopicSession, topicSessionParticipants);
+            SetTopicParticipants(newTopicSession, topicSessionParticipants);
             dbase.SaveChanges();
         }
 
@@ -472,24 +480,24 @@ namespace EasyMinutesServer.Models
             #endregion
         }
 
-        public void UpdateTopic(int currentTopicSessionId, string title, string details, List<int>? participantIds, DateTimeOffset toBeCompletedDate)
+        public void UpdateTopic(int sessionId, string title, string details, List<int>? participantIds, DateTimeOffset toBeCompletedDate)
         {
-            List<ParticipantCx> participants = new();
+            List<UserCx> participants = new();
             if (participantIds != null && participantIds.Count != 0)
             {
-                if (dbase.Participants != null) participants = dbase.Participants.Where(o => participantIds.Contains(o.Id)).ToList();
+                if (dbase.Users != null) participants = dbase.Users.Where(o => participantIds.Contains(o.Id)).ToList();
             }
-            var currentTopicSession = GetTopicSession(currentTopicSessionId);
-            if (currentTopicSession == null) throw new Exception("Current topic session is null");
-            UpdateTopic(currentTopicSession.TopicId, title);
-            UpdateTopicSession(currentTopicSession, details, participants, toBeCompletedDate);
+            var session = GetTopicSession(sessionId);
+            if (session == null) throw new Exception("Current topic session is null");
+            UpdateTopic(session.TopicId, title);
+            UpdateTopicSession(session, details, participants, toBeCompletedDate);
         }
 
-        private void UpdateTopicSession(TopicSessionCx currentTopicSession, string details, List<ParticipantCx> participants, DateTimeOffset toBeCompletedDate)
+        private void UpdateTopicSession(TopicSessionCx session, string details, List<UserCx> participants, DateTimeOffset toBeCompletedDate)
         {
-            currentTopicSession.Details = details;
-            currentTopicSession.ToBeCompletedDate = toBeCompletedDate;
-            SetParticipants(currentTopicSession, participants);
+            session.Details = details;
+            session.ToBeCompletedDate = toBeCompletedDate;
+            SetTopicParticipants(session, participants);
             dbase.SaveChanges();
         } 
         #endregion
@@ -497,31 +505,31 @@ namespace EasyMinutesServer.Models
 
         #endregion
 
-        #region *// Participants
-        public ParticipantCx? GetParticipant(int? participantId)
+        #region *// Users
+        public UserCx? GetUser(int? userId)
         {
-            if (participantId == null) throw new Exception("Author id is null");
-            if (dbase.Participants == null) return null;
-            return dbase.Participants.Include(o=>o.Slaves).ThenInclude(p=>p.Slave).FirstOrDefault(o => o.Id == participantId && !o.IsDeleted);
+            if (userId == null) throw new Exception("User id is null");
+            if (dbase.Users == null) return null;
+            return dbase.Users.Include(o=>o.Slaves).ThenInclude(p=>p.Slave).FirstOrDefault(o => o.Id == userId && !o.IsDeleted);
         }
 
-        internal int GetParticipantId(string participantEmail)
+        internal int GetUserId(string email)
         {
-            return dbase.Participants.FirstOrDefault(o => o.Email == participantEmail)?.Id??0;
+            return dbase.Users.FirstOrDefault(o => o.Email == email)?.Id??0;
         }
 
-        internal int GetParticipantIdFromName(string participantName)
+        internal int GetUserIdFromName(string userName)
         {
-            return dbase.Participants.FirstOrDefault(o => o.Name == participantName)?.Id ?? 0;
+            return dbase.Users.FirstOrDefault(o => o.Name == userName)?.Id ?? 0;
         }
 
-        public List<ParticipantCx> GetParticipants(int ownerId)
+        public List<UserCx> GetOwnerUsers(int ownerId)
         {
-            var list = new List<ParticipantCx>();
-            var owner = GetParticipant(ownerId);
+            var list = new List<UserCx>();
+            var owner = GetUser(ownerId);
             if (owner == null) return new();
-            var participants = owner.Slaves.Select(o => o.Slave).Where(o=>!o.IsDeleted).ToList();
-            return participants;
+            var users = owner.Slaves.Select(o => o.Slave).Where(o=>!o.IsDeleted).ToList();
+            return users;
         }
 
         /// <summary>
@@ -530,25 +538,26 @@ namespace EasyMinutesServer.Models
         /// <param name="meeting"></param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
-        public List<ParticipantCx>? GetAllParticipants(MeetingCx meeting)
+        public List<UserCx>? GetAllUsers(MeetingCx meeting)
         {
             if (meeting == null) throw new Exception("Meeting is null");
-            var participants = meeting.Delegates;
-            if (meeting.Author != null) participants.Add(meeting.Author);
-            participants.AddRange(GetAllocatedParticipants(meeting) ?? new());
-            return participants.Distinct().ToList();
+            var users = new List<UserCx>();
+            users.AddRange(meeting.Delegates);
+            users.AddRange(GetAllocatedParticipants(meeting) ?? new());
+            if (meeting.Author != null) users.Add(meeting.Author);
+            return users.Distinct().ToList();
         }
 
         /// <summary>
-        /// Used to only get the participants allocated to topics
+        /// Used to only get the allocated participants to meeting topics
         /// </summary>
         /// <param name="meeting"></param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
-        public List<ParticipantCx>? GetAllocatedParticipants(MeetingCx meeting)
+        public List<UserCx>? GetAllocatedParticipants(MeetingCx meeting)
         {
             if (meeting == null) throw new Exception("Meeting is null");
-            var participants = new List<ParticipantCx>();
+            var participants = new List<UserCx>();
             foreach (var topic in meeting.Topics)
             {
                 foreach (var session in topic.Sessions)
@@ -560,44 +569,25 @@ namespace EasyMinutesServer.Models
         }
 
         /// <summary>
-        /// Used as a converter from list of participant ids to list of participants
+        /// Used as a converter from list of user ids to list of users
         /// </summary>
-        /// <param name="participantIds"></param>
+        /// <param name="userIds"></param>
         /// <returns></returns>
-        public List<ParticipantCx>? GetParticipants(List<int> participantIds)
+        public List<UserCx>? GetUsers(List<int> userIds)
         {
-            if (participantIds == null) return new();
-            if (dbase.Participants == null) return new();
-            return dbase.Participants.Where(o=>participantIds.Contains(o.Id)).ToList();
+            if (userIds == null) return new();
+            if (dbase.Users == null) return new();
+            return dbase.Users.Where(o=>userIds.Contains(o.Id)).ToList();
         }
 
-        internal List<ParticipantCx> GetMeetingParticipants(int meetingId)
-        {
-            var totalParticipants = new List<ParticipantCx>();
-            if (dbase.Participants == null) return new();
-            var meeting = GetMeeting(meetingId);
-            if (meeting == null) return new();
-            var topics = GetTopics(meeting.Id);
-            foreach (var topic in topics)
-            {
-                var sessions = GetTopicSessions(topic.Id);
-                foreach (var session in sessions)
-                {
-                    var sessionParticipants = session.AllocatedParticipants;
-                    totalParticipants.AddRange(sessionParticipants);
-                }
-            }
-            return totalParticipants;
-        }
-
-        internal List<ParticipantCx> GetSessionParticipants(int sessionId)
+        internal List<UserCx> GetSessionParticipants(int sessionId)
         {
             var session = GetTopicSession(sessionId);
             if (session == null) throw new Exception("Session is null");
             return session.AllocatedParticipants.Where(o=>!o.IsDeleted).ToList();
         }
 
-        internal ParticipantCx AddParticipant(string email, string name, string password)
+        internal UserCx AddUser(string email, string name, string password)
         {
             email = email.Trim();
             name = name.Trim();
@@ -605,78 +595,75 @@ namespace EasyMinutesServer.Models
 
             if (email == "" && name == "") throw new Exception("Email or name must be defined");
 
-            // Creation of top-level participant
+            // Creation of top-level user
             if (email != "")
             {
-                var participantId = GetParticipantId(email);
-                if (participantId != 0) throw new Exception("Email is already in use"); // Duplicate top-level accounts not allowed 
+                var userId = GetUserId(email);
+                if (userId != 0) throw new Exception("Email is already in use"); // Duplicate top-level accounts not allowed 
             }
             if (name != "")
             {
-                var participantId = GetParticipantIdFromName(name);
-                if (participantId != 0) throw new Exception("Name is already in use"); // Duplicate top-level accounts not allowed 
+                var userId = GetUserIdFromName(name);
+                if (userId != 0) throw new Exception("Name is already in use"); // Duplicate top-level accounts not allowed 
             }
-            var participant = new ParticipantCx() { Email = email, Name = name, Password = password };
-            dbase.Participants.Add(participant);
+            var user = new UserCx() { Email = email, Name = name, Password = password };
+            dbase.Users.Add(user);
 
             dbase.SaveChanges();
-            return participant;
+            return user;
         }
 
-        internal void AddParticipant(int ownerId, int participantId)
+        internal void AddOwnerUser(int ownerId, int userId)
         {
             if (ownerId == 0) throw new Exception("Owner must be defined");
-            var owner = GetParticipant(ownerId);
+            var owner = GetUser(ownerId);
             if (owner == null) throw new Exception("Owner is null");
-            if (participantId == 0) throw new Exception("Participant must be defined");
-            var participant = GetParticipant(participantId);
-            if (participant == null) throw new Exception("Participant is null");
+            if (userId == 0) throw new Exception("User must be defined");
+            var user = GetUser(userId);
+            if (user == null) throw new Exception("User is null");
             var slaves = owner.Slaves.Select(o => o.Slave);
-            if (slaves.Select(o=>o.Id).Contains(participantId)) return;
-            owner.Slaves.Add(new ParticipantMasterSlave { Master = owner, Slave = participant });
+            if (slaves.Select(o=>o.Id).Contains(userId)) return;
+            owner.Slaves.Add(new UserMasterSlave { Master = owner, Slave = user });
             dbase.SaveChanges();
         }
 
-        internal void UpdateParticipant(int participantId, string email, string name, string password)
+        internal void UpdateUser(int userId, string email, string name, string password)
         {
-            var participant = dbase.Participants.FirstOrDefault(o => o.Id == participantId);
-            if (participant == null) throw new BusinessException("Participant does not exists");
-            participant.Email = email;
-            participant.Name = name;    
-            participant.Password = password;
+            var user = dbase.Users.FirstOrDefault(o => o.Id == userId);
+            if (user == null) throw new BusinessException("User does not exists");
+            user.Email = email;
+            user.Name = name;    
+            user.Password = password;
             dbase.SaveChanges();
         }
 
         internal void UpdatePasswordMC(string email, string password)
         {
-            var participant = dbase.Participants.FirstOrDefault(o => o.Email == email);
-            if (participant == null) throw new BusinessException($"Participant with email {email} does not exists");
-            participant.Password = password;
+            var user = dbase.Users.FirstOrDefault(o => o.Email == email);
+            if (user == null) throw new BusinessException($"User with email {email} does not exists");
+            user.Password = password;
             dbase.SaveChanges();
         }
 
-        internal void DeleteParticipant(int participantId)
+        internal void DeleteUser(int userId)
         {
-            if (dbase.Participants == null) throw new Exception("Dbase table [Participants] is null");
-            var participant = dbase.Participants.FirstOrDefault(o => o.Id == participantId);
-            if (participant == null) throw new BusinessException("Participant does not exists");
-            participant.IsDeleted = true;
+            var user = dbase.Users.FirstOrDefault(o => o.Id == userId);
+            if (user == null) throw new BusinessException("User does not exists");
+            user.IsDeleted = true;
             dbase.SaveChanges();
         }
 
         internal void SetParticipants(int sessionId, List<int>? participantIds)
         {
-            if (dbase == null) throw new Exception("Server dbase is null");
-            if (dbase.Participants == null) throw new Exception("Dbase table [Participants] is null");
-            if (participantIds == null) throw new Exception("Participant Ids are null");
+            if (participantIds == null) throw new Exception("ParticipantIds are null");
             var session = GetTopicSession(sessionId);
             if (session == null) throw new Exception("Session is null");
 
-            var participants = dbase.Participants.Where(o => participantIds.Contains(o.Id)).ToList();
-            SetParticipants(session, participants);
+            var participants = dbase.Users.Where(o => participantIds.Contains(o.Id)).ToList();
+            SetTopicParticipants(session, participants);
         }
 
-        internal void SetParticipants(TopicSessionCx session, List<ParticipantCx>? updateParticipants)
+        internal void SetTopicParticipants(TopicSessionCx session, List<UserCx>? updateParticipants)
         {
             if (updateParticipants == null) throw new Exception("Participants are null");
             var currentParticipants = session.AllocatedParticipants.ToList();
@@ -699,7 +686,7 @@ namespace EasyMinutesServer.Models
         {
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
-            var newDelegates = GetParticipants(delegateIds);
+            var newDelegates = GetUsers(delegateIds);
             meeting.Delegates = newDelegates??new();
             dbase.SaveChanges();
         }
@@ -708,11 +695,11 @@ namespace EasyMinutesServer.Models
         #endregion
 
         #region *// Login
-        internal (ParticipantCx? participant, string errorMessage) SignIn(string email, string password)
+        internal (UserCx? user, string errorMessage) SignIn(string email, string password)
         {
-            var participant = dbase.Participants.FirstOrDefault(o=>o.Email.ToLower() == email.ToLower() && o.Password == password);
-            if (participant == null) {
-                if (!dbase.Participants.ToList().Exists(o=>o.Email == email))
+            var user = dbase.Users.FirstOrDefault(o=>o.Email.ToLower() == email.ToLower() && o.Password == password);
+            if (user == null) {
+                if (!dbase.Users.ToList().Exists(o=>o.Email == email))
                 {
                     return (null, $"User with email [{email}] does not exist");
                 }
@@ -721,27 +708,27 @@ namespace EasyMinutesServer.Models
                     return (null, "Incorrect password");
                 }
             }
-            return (participant, "");
+            return (user, "");
         }
 
-        internal (ParticipantCx? participant, string errorMessage) SignIn(string pin)
+        internal (UserCx? user, string errorMessage) SignIn(string pin)
         {
-            var foundPin = dbase.Pins.Include(o=>o.Participant).FirstOrDefault(o => o.Value == pin);
+            var foundPin = dbase.Pins.Include(o=>o.User).FirstOrDefault(o => o.Value == pin);
             if (foundPin != null)
             {
                 if (!foundPin.IsValid)
                 {
                     return (null, $"The entered pin has expired ({ConstantsGlobal.PinTimeoutInDays} days validity)");
                 }
-                return (foundPin.Participant, "");
+                return (foundPin.User, "");
             }
 
             return (null, $"The entered pin does not exist");
         }
 
-        internal PinCx CreatePin(ParticipantCx participant)
+        internal PinCx CreatePin(UserCx user)
         {
-            var pin = new PinCx { Value = new Random().Next(1, 999999).ToString("######"), Participant = participant, DateTimeStamp = DateTimeOffset.Now };
+            var pin = new PinCx { Value = new Random().Next(1, 999999).ToString("######"), UserId = user.Id, DateTimeStamp = DateTimeOffset.Now };
             dbase.Pins.Add(pin);
             dbase.SaveChanges();
             return pin;
@@ -762,42 +749,42 @@ namespace EasyMinutesServer.Models
             return pin.ToString();
         }
 
-        public void ConfirmEmail(string participantId)
+        public void ConfirmEmail(string userId)
         {
-            if (participantId == "") throw new Exception("Id is empty");
-            var success = int.TryParse(participantId, out int id);
+            if (userId == "") throw new Exception("Id is empty");
+            var success = int.TryParse(userId, out int id);
             if (success) throw new Exception("Id is not a number");
-            var participant = GetParticipant(id);
-            if (participant == null) throw new Exception("Participant does not exist");
-            participant.IsEmailConfirmed = true;
+            var user = GetUser(id);
+            if (user == null) throw new Exception("User does not exist");
+            user.IsEmailConfirmed = true;
             dbase.SaveChanges();
         }
-        public void Subscribe(string participantId)
+        public void Subscribe(string userId)
         {
-            if (participantId == "") throw new Exception("Id is empty");
-            var success = int.TryParse(participantId, out int id);
+            if (userId == "") throw new Exception("UserId is empty");
+            var success = int.TryParse(userId, out int id);
             if (!success) throw new Exception("Id is not a number");
-            var participant = GetParticipant(id);
-            if (participant == null) throw new Exception("Participant does not exist");
-            participant.IsUnsubscribed = false;
+            var user = GetUser(id);
+            if (user == null) throw new Exception("User does not exist");
+            user.IsUnsubscribed = false;
             dbase.SaveChanges();
         }
 
-        public void UnSubscribe(string participantId)
+        public void UnSubscribe(string userId)
         {
-            if (participantId == "") throw new Exception("Id is empty");
-            var success = int.TryParse(participantId, out int id);
+            if (userId == "") throw new Exception("Id is empty");
+            var success = int.TryParse(userId, out int id);
             if (!success) throw new Exception("Id is not a number");
-            var participant = GetParticipant(id);
-            if (participant == null) throw new Exception("Participant does not exist");
-            participant.IsUnsubscribed = true;
+            var user = GetUser(id);
+            if (user == null) throw new Exception("User does not exist");
+            user.IsUnsubscribed = true;
             dbase.SaveChanges();
         }
 
         #endregion
-        internal string DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds, bool isPreview = false)
+        internal string DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, bool isPreview = false)
         {
-            List<ParticipantCx> filteredParticipants = new();
+            List<UserCx> filteredUsers = new();
 
             var meeting = GetMeeting(meetingId);
             if (meeting == null) throw new Exception("Meeting is null");
@@ -805,40 +792,41 @@ namespace EasyMinutesServer.Models
             switch (distributeFilterOption)
             {
                 case DistributeFilterOptions.All:
-                    filteredParticipants = GetAllParticipants(meeting) ?? new();
+                    filteredUsers = GetAllUsers(meeting) ?? new();
                     break;
                 case DistributeFilterOptions.Allocated:
-                    filteredParticipants = GetAllocatedParticipants(meeting) ?? new();
+                    filteredUsers = GetAllocatedParticipants(meeting) ?? new();
                     break;
                 case DistributeFilterOptions.Selective:
-                    filteredParticipants = GetParticipants(participantIds) ?? new();
+                    filteredUsers = GetUsers(userIds) ?? new();
                     break;
                 default:
                     break;
             }
 
-            filteredParticipants = filteredParticipants.Where(o => o.Email != "" && !o.IsUnsubscribed).ToList();
+            filteredUsers = filteredUsers.Where(o => o.Email != "" && !o.IsUnsubscribed).ToList();
 
-            if (filteredParticipants == null || filteredParticipants.Count == 0) throw new BusinessException("Meeting has no participants with email adresses. There is no need to distribute");
-            Debug.WriteLine("Filtered participants");
-            filteredParticipants.ForEach(o => Debug.WriteLine($"Id: {o.Id}, Email: {o.Email}, Name: {o.FromDb().Name}"));
+            if (filteredUsers == null || filteredUsers.Count == 0) throw new BusinessException("Meeting has no users with email adresses. There is no need to distribute");
+            Debug.WriteLine("Filtered users");
+            filteredUsers.ForEach(o => Debug.WriteLine($"Id: {o.Id}, Email: {o.Email}, Name: {o.FromDb().Name}"));
 
-            foreach (var filteredParticipant in filteredParticipants)
+            foreach (var filteredUser in filteredUsers)
             {
-                var minutesHtmlTable = GenerateMinutesForAllParticipantHtmlTable(meeting, filteredParticipant);
+                var minutesHtmlTable = GenerateMinutesHtmlTable(meeting, filteredUser);
                 var body = GenerateDistributionHtmlBodyTemplate();
-                body = body.Replace("<<USERNAME>>", filteredParticipant.FromDb().Name);
+                body = body.Replace("<<USERNAME>>", filteredUser.FromDb().Name);
                 body = body.Replace("<<MEETING_NAME>>", meeting.Name);
                 body = body.Replace("<<TABLE>>", minutesHtmlTable);
-                var pin = CreatePin(filteredParticipant);
+                var pin = CreatePin(filteredUser);
                 body = body.Replace("<<PIN>>", pin.Value);
-                body = body.Replace("<<UNSUBSCRIBE_URL>>", $"{Constants.ServerUrl}/api/signup/UnSubscribe?id={filteredParticipant.Id}");
+                var serverUrl = IsServerRemote ? Constants.RemoteServerUrl : Constants.LocalServerUrl;
+                body = body.Replace("<<UNSUBSCRIBE_URL>>", $"{serverUrl}/api/signup/UnSubscribe?id={filteredUser.Id}");
                 if (isPreview)
                 {
                     Debug.WriteLine($"Preview generated and returned");
                     return body;
                 }
-                mailWorker.ScheduleMail(meeting.Name, filteredParticipant.Email, body);
+                mailWorker.ScheduleMail(meeting.Name, filteredUser.Email, body);
             }
 
             Debug.WriteLine($"Meeting succesfully distributed");
@@ -874,7 +862,7 @@ namespace EasyMinutesServer.Models
         }
 
         // https://stackoverflow.com/questions/36475679/dynamically-create-html-table-in-c-sharp
-        private static string GenerateMinutesForAllParticipantHtmlTable(MeetingCx meeting, ParticipantCx filteredParticipant)
+        private static string GenerateMinutesHtmlTable(MeetingCx meeting, UserCx filteredUser)
         {
             var topics = meeting.Topics;
 
@@ -886,7 +874,7 @@ namespace EasyMinutesServer.Models
             {
                 foreach (var session in topic.Sessions)
                 {
-                    bool isFiltered = session.AllocatedParticipants.Exists(o=>o.Id == filteredParticipant.Id);
+                    bool isFiltered = session.AllocatedParticipants.Exists(o=>o.Id == filteredUser.Id);
 
                     var partipantsText = "";
                     foreach (var participant in session.AllocatedParticipants)
@@ -968,9 +956,9 @@ namespace EasyMinutesServer.Models
             return sb.ToString();
         }
 
-        internal string PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> participantIds)
+        internal string PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds)
         {
-            return DistributeMeeting(meetingId, distributeFilterOption, participantIds, true);
+            return DistributeMeeting(meetingId, distributeFilterOption, userIds, true);
         }
 
         internal static void ServerTest()
