@@ -30,8 +30,11 @@ namespace EasyMinutesServer.Models
             dbase.Pins.RemoveRange(dbase.Pins);
             dbase.Sessions.RemoveRange(dbase.Sessions);
             dbase.Topics.RemoveRange(dbase.Topics);
-            dbase.Users.RemoveRange(dbase.Users);
             dbase.Meetings.RemoveRange(dbase.Meetings);
+            dbase.SaveChanges();
+            var masters = dbase.Users.Where(o => o.Slaves.Any()).ToList();
+            masters.ForEach(o => o.Slaves.Clear());
+            dbase.Users.RemoveRange(dbase.Users);
             dbase.SaveChanges();
         }
 
@@ -587,6 +590,7 @@ namespace EasyMinutesServer.Models
             return session.AllocatedParticipants.Where(o=>!o.IsDeleted).ToList();
         }
 
+
         internal UserCx AddUser(string email, string name, string password)
         {
             email = email.Trim();
@@ -595,17 +599,12 @@ namespace EasyMinutesServer.Models
 
             if (email == "" && name == "") throw new Exception("Email or name must be defined");
 
-            // Creation of top-level user
             if (email != "")
             {
                 var userId = GetUserId(email);
                 if (userId != 0) throw new Exception("Email is already in use"); // Duplicate top-level accounts not allowed 
             }
-            if (name != "")
-            {
-                var userId = GetUserIdFromName(name);
-                if (userId != 0) throw new Exception("Name is already in use"); // Duplicate top-level accounts not allowed 
-            }
+
             var user = new UserCx() { Email = email, Name = name, Password = password };
             dbase.Users.Add(user);
 
@@ -633,7 +632,7 @@ namespace EasyMinutesServer.Models
             if (user == null) throw new BusinessException("User does not exists");
             user.Email = email;
             user.Name = name;    
-            user.Password = password;
+            if (password != "") user.Password = password;
             dbase.SaveChanges();
         }
 
