@@ -23,7 +23,8 @@ namespace EasyMinutesServer.Data
                     AccessPin = table.Column<int>(type: "int", nullable: false),
                     DisplayOrder = table.Column<int>(type: "int", nullable: false),
                     IsChecked = table.Column<bool>(type: "bit", nullable: false),
-                    IsUnsubscribed = table.Column<bool>(type: "bit", nullable: false)
+                    IsUnsubscribed = table.Column<bool>(type: "bit", nullable: false),
+                    IsSignUpUser = table.Column<bool>(type: "bit", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -37,7 +38,7 @@ namespace EasyMinutesServer.Data
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    AuthorId = table.Column<int>(type: "int", nullable: true),
+                    AuthorId = table.Column<int>(type: "int", nullable: false),
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DisplayOrder = table.Column<int>(type: "int", nullable: false),
                     IsChecked = table.Column<bool>(type: "bit", nullable: false),
@@ -50,7 +51,8 @@ namespace EasyMinutesServer.Data
                         name: "FK_Meetings_Users_AuthorId",
                         column: x => x.AuthorId,
                         principalTable: "Users",
-                        principalColumn: "Id");
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -80,6 +82,7 @@ namespace EasyMinutesServer.Data
                 {
                     SlaveId = table.Column<int>(type: "int", nullable: false),
                     MasterId = table.Column<int>(type: "int", nullable: false),
+                    Id = table.Column<int>(type: "int", nullable: false),
                     UserCxId = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using EasyMinutesServer.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace EasyMinutesServer.Controllers
 {
@@ -6,6 +7,11 @@ namespace EasyMinutesServer.Controllers
     [ApiController]
     public class SignupController : Controller
     {
+        MinutesModel minutesModel;
+        public SignupController(MinutesModel minutesModel)
+        {
+            this.minutesModel = minutesModel;
+        }
 
 
         // https://192.168.0.170:45455/api/signup/ping
@@ -17,6 +23,17 @@ namespace EasyMinutesServer.Controllers
 
         }
 
-
+        public string UnSubscribe(string id)
+        {
+            try
+            {
+                minutesModel.UnSubscribe(id);
+                return "You have succesffully unsubscribed";
+            }
+            catch (Exception ex)
+            {
+                return $"Unable to unsubscribe: {ex.Message}";
+            }
+        }
     }
 }

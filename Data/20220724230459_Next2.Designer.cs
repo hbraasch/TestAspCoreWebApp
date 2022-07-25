@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EasyMinutesServer.Data
 {
     [DbContext(typeof(DbaseContext))]
-    [Migration("20220719002500_First2")]
-    partial class First2
+    [Migration("20220724230459_Next2")]
+    partial class Next2
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
@@ -32,7 +32,7 @@ namespace EasyMinutesServer.Data
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
-                    b.Property<int?>("AuthorId")
+                    b.Property<int>("AuthorId")
                         .HasColumnType("int");
 
                     b.Property<DateTimeOffset>("CreationDateTimeStamp")
@@ -138,6 +138,10 @@ namespace EasyMinutesServer.Data
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("ToBeCompletedDate")
                         .HasColumnType("datetimeoffset");
 
@@ -179,6 +183,9 @@ namespace EasyMinutesServer.Data
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsEmailConfirmed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSignUpUser")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsUnsubscribed")
@@ -254,7 +261,9 @@ namespace EasyMinutesServer.Data
                 {
                     b.HasOne("EasyMinutesServer.Models.DbaseContext+UserCx", "Author")
                         .WithMany()
-                        .HasForeignKey("AuthorId");
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Author");
                 });

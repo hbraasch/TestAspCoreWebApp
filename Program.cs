@@ -10,34 +10,45 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
+
+#region *// Database
 // var connectionstring = builder.Configuration.GetConnectionString("DefaultSqliteConnection");
 // builder.Services.AddDbContext<DbaseContext>(options => { options.UseSqlite(connectionstring); options.EnableSensitiveDataLogging(true); });
 
 string conn = "";
+string mailerKey = "";
 if (GetIpAddress().FirstOrDefault(o => o.Contains("192.168.0")) != null)
 {
     // Running on local machine
     conn = builder.Configuration.GetConnectionString("LocalSqlServerConnection");
+    mailerKey = builder.Configuration["DevMailerKey"];
 }
 else
 {
     // Running on remote server
     conn = builder.Configuration.GetConnectionString("RemoteSqlServerConnection");
+    mailerKey = builder.Configuration["MailerKey"];
 }
 builder.Services.AddDbContext<DbaseContext>(options => options.UseSqlServer(conn));
+#endregion
 
+#region *// Mailer
 builder.Services.AddSingleton<IMailWorker, MailWorker>();
-builder.Services.AddHostedService<BackgroundMailer>();
+builder.Services.AddHostedService(sp => { return new BackgroundMailer(sp.GetService<IMailWorker>(), mailerKey); }); 
+#endregion
+
 builder.Services.AddTransient<MinutesModel>();
 
 var app = builder.Build();
 
+#region *// Ensure database exists
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<DbaseContext>();
     await dbContext.Database.EnsureCreatedAsync();
     await dbContext.Database.MigrateAsync();
-}
+} 
+#endregion
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

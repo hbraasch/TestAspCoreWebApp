@@ -4,23 +4,23 @@
 
 namespace EasyMinutesServer.Data
 {
-    public partial class First2 : Migration
+    public partial class Next2 : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "Id",
-                table: "UserMasterSlave",
-                type: "int",
+            migrationBuilder.AddColumn<string>(
+                name: "Notes",
+                table: "Sessions",
+                type: "nvarchar(max)",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: "");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Id",
-                table: "UserMasterSlave");
+                name: "Notes",
+                table: "Sessions");
         }
     }
 }

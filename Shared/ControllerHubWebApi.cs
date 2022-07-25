@@ -16,6 +16,7 @@ using Newtonsoft.Json;
 using TreeApps.Maui.Helpers;
 using static EasyMinutesServer.Models.DbaseContext;
 using static EasyMinutesServer.Shared.Dbase;
+using static EasyMinutesServer.Shared.MinutesController;
 #endif
 
 namespace EasyMinutesServer.Shared
@@ -505,6 +506,7 @@ namespace EasyMinutesServer.Shared
                 public string Details { get; set; } = "";
                 public List<int> ParticipantIds { get; set; } = new();
                 public DateTimeOffset ToBeCompletedDate { get; set; }
+                public string Notes { get; set; } = "";
             }
 
             public class Response : ResponseBase
@@ -513,14 +515,15 @@ namespace EasyMinutesServer.Shared
             }
         }
 #if __CLIENT__
-        internal async Task UpdateTopic(int currentTopicSessionId, string title, string details, List<int> participantIds, DateTimeOffset toBeCompletedDate, CancellationTokenSource cts)
+        internal async Task UpdateTopic(int currentTopicSessionId, string title, string details, List<int> participantIds, DateTimeOffset toBeCompletedDate, string notes, CancellationTokenSource cts)
         {
             await SendMessage<UpdateTopicMC.Command, UpdateTopicMC.Response>(new UpdateTopicMC.Command { 
                 CurrentTopicSessionId = currentTopicSessionId,
                 Title = title,
                 Details = details,
                 ParticipantIds = participantIds,
-                ToBeCompletedDate = toBeCompletedDate
+                ToBeCompletedDate = toBeCompletedDate,
+                Notes = notes
             }, nameof(UpdateTopic), cts);
         }
 #else
@@ -528,7 +531,7 @@ namespace EasyMinutesServer.Shared
         public async Task<ActionResult<UpdateTopicMC.Response>> UpdateTopic([FromBody] UpdateTopicMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                minutesModel.UpdateTopic(command.CurrentTopicSessionId, command.Title, command.Details, command.ParticipantIds, command.ToBeCompletedDate);
+                minutesModel.UpdateTopic(command.CurrentTopicSessionId, command.Title, command.Details, command.ParticipantIds, command.ToBeCompletedDate, command.Notes);
                 return new UpdateTopicMC.Response();
             });
 
@@ -785,12 +788,43 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
-        public class AddUserMC
+        public class AddCompactUserMC
+        {
+            public class Command
+            {
+                public string Name { get; set; } = "";
+                public string Email { get; set; } = "";
+            }
+
+            public class Response : ResponseBase
+            {
+                public User? User { get; set; }
+            }
+        }
+
+#if __CLIENT__
+        internal async Task<User?> AddCompactUser(string name, string email, CancellationTokenSource cts)
+        {
+            return (await SendMessage<AddCompactUserMC.Command, AddCompactUserMC.Response>(new AddCompactUserMC.Command { Email = email, Name = name}, nameof(AddCompactUser), cts))?.User;
+        }
+#else
+        [HttpPost]
+        public async Task<ActionResult<AddCompactUserMC.Response>> AddCompactUser([FromBody] AddCompactUserMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                var user = minutesModel.AddCompactUser(command.Name, command.Email).FromDb();
+                return new AddCompactUserMC.Response { User = user };
+            });
+
+            return AcceptedAtAction(nameof(AddCompactUser), response);
+        }
+#endif
+
+        public class AddSignUpUserMC
         {
             public class Command
             {
                 public string Email { get; set; } = "";
-                public string Name { get; set; } = "";
                 public string Password { get; set; } = "";
             }
 
@@ -801,20 +835,20 @@ namespace EasyMinutesServer.Shared
         }
 
 #if __CLIENT__
-        internal async Task<User?> AddUser(string email, string name, string password, CancellationTokenSource cts)
+        internal async Task<User?> AddSignUpUser(string email, string password, CancellationTokenSource cts)
         {
-            return (await SendMessage<AddUserMC.Command, AddUserMC.Response>(new AddUserMC.Command { Email = email, Name = name, Password = password }, nameof(AddUser), cts))?.User;
+            return (await SendMessage<AddSignUpUserMC.Command, AddSignUpUserMC.Response>(new AddSignUpUserMC.Command { Email = email, Password = password }, nameof(AddSignUpUser), cts))?.User;
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<AddUserMC.Response>> AddUser([FromBody] AddUserMC.Command command)
+        public async Task<ActionResult<AddSignUpUserMC.Response>> AddSignUpUser([FromBody] AddSignUpUserMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var user = minutesModel.AddUser(command.Email, command.Name, command.Password).FromDb();
-                return new AddUserMC.Response { User = user };
+                var user = minutesModel.AddSignUpUser(command.Email, command.Password).FromDb();
+                return new AddSignUpUserMC.Response { User = user };
             });
 
-            return AcceptedAtAction(nameof(AddUser), response);
+            return AcceptedAtAction(nameof(AddSignUpUser), response);
         }
 #endif
 
@@ -1079,6 +1113,8 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
+
+
         public class PreviewDistributedMeetingMC
         {
             public class Command
@@ -1090,25 +1126,31 @@ namespace EasyMinutesServer.Shared
 
             public class Response : ResponseBase
             {
-                public string MailHtml { get; set; } = "";
+                public List<PreviewData> Previews { get; set; } = new();
             }
         }
 
-#if __CLIENT__
-        internal async Task<string> PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, CancellationTokenSource cts)
+        public class PreviewData
         {
-            return (await SendMessage<PreviewDistributedMeetingMC.Command, PreviewDistributedMeetingMC.Response>(new PreviewDistributedMeetingMC.Command { MeetingId = meetingId, DistributeFilterOption = distributeFilterOption, UserIds = userIds }, nameof(PreviewDistributedMeeting), cts))?.MailHtml??"";
+            public string Message { get; set; } = "";
+            public string Html { get; set; } = "";
+        }
+
+#if __CLIENT__
+        internal async Task<List<PreviewData>> GetDistributedMeetingPreviews(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, CancellationTokenSource cts)
+        {
+            return (await SendMessage<PreviewDistributedMeetingMC.Command, PreviewDistributedMeetingMC.Response>(new PreviewDistributedMeetingMC.Command { MeetingId = meetingId, DistributeFilterOption = distributeFilterOption, UserIds = userIds }, nameof(GetDistributedMeetingPreviews), cts))?.Previews??new();
         }
 #else
         [HttpPost]
-        public async Task<ActionResult<PreviewDistributedMeetingMC.Response>> PreviewDistributedMeeting([FromBody] PreviewDistributedMeetingMC.Command command)
+        public async Task<ActionResult<PreviewDistributedMeetingMC.Response>> GetDistributedMeetingPreviews([FromBody] PreviewDistributedMeetingMC.Command command)
         {
             var response = await ReceiveMessage(command, (command) => {
-                var mailHtml = minutesModel.PreviewDistributedMeeting(command.MeetingId, command.DistributeFilterOption, command.UserIds);
-                return new PreviewDistributedMeetingMC.Response { MailHtml = mailHtml };
+                var previews = minutesModel.GetDistributedMeetingPreviews(command.MeetingId, command.DistributeFilterOption, command.UserIds);
+                return new PreviewDistributedMeetingMC.Response { Previews = previews };
             });
 
-            return AcceptedAtAction(nameof(PreviewDistributedMeeting), response);
+            return AcceptedAtAction(nameof(GetDistributedMeetingPreviews), response);
         }
 #endif
 
@@ -1309,41 +1351,7 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
-        public class GetUserIdFromNameMC
-        {
-            public class Command
-            {
-                public string UserName { get; set; } = "";
-            }
-
-            public class Response : ResponseBase
-            {
-                public int Id { get; set; }
-            }
-        }
-
-#if __CLIENT__
-        internal async Task<int> GetUserIdFromName(string UserName, CancellationTokenSource cts)
-        {
-            return (await SendMessage<GetUserIdFromNameMC.Command, GetUserIdFromNameMC.Response>(new GetUserIdFromNameMC.Command { UserName = UserName }, nameof(GetUserIdFromName), cts))?.Id ?? 0;
-        }
-
-
-
-
-#else
-        [HttpPost]
-        public async Task<ActionResult<GetUserIdFromNameMC.Response>> GetUserIdFromName([FromBody] GetUserIdFromNameMC.Command command)
-        {
-            var response = await ReceiveMessage(command, (command) => {
-                var id = minutesModel.GetUserIdFromName(command.UserName);
-                return new GetUserIdFromNameMC.Response { Id = id };
-            });
-
-            return AcceptedAtAction(nameof(GetUserIdFromName), response);
-        }
-#endif
-
+       
         public class AddAddOwnerUserMC
         {
             public class Command
@@ -1495,6 +1503,8 @@ namespace EasyMinutesServer.Shared
             await SendMessage<ClearDatabaseMC.Command, ClearDatabaseMC.Response>(new ClearDatabaseMC.Command {}, nameof(ClearDatabase), cts);
         }
 
+
+
 #else
         [HttpPost]
         public async Task<ActionResult<ClearDatabaseMC.Response>> ClearDatabase([FromBody] ClearDatabaseMC.Command command)
@@ -1508,6 +1518,36 @@ namespace EasyMinutesServer.Shared
         }
 #endif
 
+        public class GetUserProxiesMC
+        {
+            public class Command
+            {
+                public int UserId { get; set; } = 0;
+            }
+
+            public class Response : ResponseBase
+            {
+                public List<User> UserProxies { get; set; } = new();
+            }
+        }
+
+#if __CLIENT__
+        internal async Task<List<User>> GetUserProxies(int userId, CancellationTokenSource cts)
+        {
+            return (await SendMessage<GetUserProxiesMC.Command, GetUserProxiesMC.Response>(new GetUserProxiesMC.Command { UserId = userId }, nameof(GetUserProxies), cts))?.UserProxies??new();
+        }
+#else
+        [HttpPost]
+        public async Task<ActionResult<GetUserProxiesMC.Response>> GetUserProxies([FromBody] GetUserProxiesMC.Command command)
+        {
+            var response = await ReceiveMessage(command, (command) => {
+                var userProxies = minutesModel.GetUserProxies(command.UserId).FromDb();
+                return new GetUserProxiesMC.Response { UserProxies = userProxies };
+            });
+
+            return AcceptedAtAction(nameof(GetUserProxies), response);
+        }
+#endif
 
 
 #if __CLIENT__

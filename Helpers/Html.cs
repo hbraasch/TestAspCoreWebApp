@@ -36,7 +36,7 @@ namespace EasyMinutesServer.Helpers
             background-color: tomato;
             color: white;
             padding: 40px;
-            text-align: center;
+            text-align: left;
         }
         #fontsize {
             font-size: 70%;

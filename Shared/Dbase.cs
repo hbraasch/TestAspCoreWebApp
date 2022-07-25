@@ -51,6 +51,7 @@
             public bool IsCompleted { get; set; }
 
             public bool IsDeleted { get; set; }
+            public string Notes { get; set; } = "";
 
             public List<User> AllocatedParticipants { get; set; } = new List<User>();
 
@@ -68,6 +69,7 @@
             public bool IsChecked { get; set; }
             public bool IsUnsubscribed { get; set; }
             public bool IsEmailConfirmed { get; set; }
+            public bool IsSignUpUser { get; set; }
 
             public override string ToString()
             {

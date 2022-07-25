@@ -8,6 +8,7 @@ using System.Text;
 using TreeApps.Maui.Helpers;
 using static EasyMinutesServer.Models.DbaseContext;
 using static EasyMinutesServer.Shared.Dbase;
+using static EasyMinutesServer.Shared.MinutesController;
 
 namespace EasyMinutesServer.Models
 {
@@ -44,19 +45,24 @@ namespace EasyMinutesServer.Models
             if (userId == 0) throw new Exception("User id is zero");
             var user = GetUser(userId);
             if (user == null) throw new Exception("User does not exist");
+            var userProxies = GetUserProxies(user);
+
             var meetings = dbase.Meetings
                 .Include(o => o.Delegates.Where(d => !d.IsDeleted))
                 .Include(o => o.Author)
-                .Include(o => o.Topics.Where(t => !t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s => !s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p => !p.IsDeleted)).Where(o=>!o.IsDeleted);
-            var allAuthorMeetings = meetings.Where(o => o.Author == user).ToList();
-            var allDelegatedMeetings = meetings.Where(o=>o.Delegates.Contains(user)).ToList();
-            var allAllocatedMeetings = meetings.Where(meeting => meeting.Topics.Where(topic => topic.Sessions.Where(session => session.AllocatedParticipants.Contains(user)).ToList().Count != 0).ToList().Count != 0).ToList();
+                .Include(o => o.Topics.Where(t => !t.IsDeleted)).ThenInclude(t => t.Sessions.Where(s => !s.IsDeleted)).ThenInclude(a => a.AllocatedParticipants.Where(p => !p.IsDeleted)).Where(o=>!o.IsDeleted).ToList();
+            
+            var allAuthorMeetings = meetings.Where(o => userProxies.Contains(o.Author)).ToList();
+            var allDelegatedMeetings = meetings.Where(o=>userProxies.Intersect(o.Delegates).Any()).ToList();
+            var allAllocatedMeetings = meetings.Where(meeting => meeting.Topics.Where(topic => topic.Sessions.Where(session => session.AllocatedParticipants.Intersect(userProxies).Any()).ToList().Any()).ToList().Any()).ToList();
             var allMeetings = new List<MeetingCx>();
             allMeetings.AddRange(allAuthorMeetings);
             allMeetings.AddRange(allDelegatedMeetings);
             allMeetings.AddRange(allAllocatedMeetings);
             return allMeetings.Distinct().OrderBy(o=>o.DisplayOrder).ToList();
         }
+
+
 
         internal MeetingCx? GetMeeting(int meetingId)
         {
@@ -70,13 +76,14 @@ namespace EasyMinutesServer.Models
 
         internal MeetingCx CreateMeeting(int authorId, string meetingName)
         {
-            var author = GetUser(authorId);
-            if (author == null) throw new Exception("Author does not exist");
+            var user = GetUser(authorId);
+            if (user == null) throw new Exception("User does not exist");
+            if (!user.IsSignUpUser) throw new Exception("User is not signed up");
             var meetings = GetMeetings(authorId);
             var meeting = new MeetingCx
             {
                 Name = meetingName,
-                Author = author,
+                Author = user,
                 DisplayOrder = meetings.Count
             };
             dbase.Meetings.Add(meeting);
@@ -271,9 +278,9 @@ namespace EasyMinutesServer.Models
             dbase.SaveChanges();
         }
 
-        internal void SetTopicChecked(int TopicId, bool isChecked)
+        internal void SetTopicChecked(int topicId, bool isChecked)
         {
-            var topic = dbase.Topics.FirstOrDefault(o => o.Id == TopicId);
+            var topic = dbase.Topics.FirstOrDefault(o => o.Id == topicId);
             if (topic == null) throw new Exception("Topic does not exist");
             topic.IsChecked = isChecked;
             dbase.SaveChanges();
@@ -483,7 +490,7 @@ namespace EasyMinutesServer.Models
             #endregion
         }
 
-        public void UpdateTopic(int sessionId, string title, string details, List<int>? participantIds, DateTimeOffset toBeCompletedDate)
+        public void UpdateTopic(int sessionId, string title, string details, List<int>? participantIds, DateTimeOffset toBeCompletedDate, string notes)
         {
             List<UserCx> participants = new();
             if (participantIds != null && participantIds.Count != 0)
@@ -493,14 +500,15 @@ namespace EasyMinutesServer.Models
             var session = GetTopicSession(sessionId);
             if (session == null) throw new Exception("Current topic session is null");
             UpdateTopic(session.TopicId, title);
-            UpdateTopicSession(session, details, participants, toBeCompletedDate);
+            UpdateTopicSession(session, details, participants, toBeCompletedDate, notes);
         }
 
-        private void UpdateTopicSession(TopicSessionCx session, string details, List<UserCx> participants, DateTimeOffset toBeCompletedDate)
+        private void UpdateTopicSession(TopicSessionCx session, string details, List<UserCx> participants, DateTimeOffset toBeCompletedDate, string notes)
         {
             session.Details = details;
             session.ToBeCompletedDate = toBeCompletedDate;
             SetTopicParticipants(session, participants);
+            session.Notes = notes;
             dbase.SaveChanges();
         } 
         #endregion
@@ -516,15 +524,28 @@ namespace EasyMinutesServer.Models
             return dbase.Users.Include(o=>o.Slaves).ThenInclude(p=>p.Slave).FirstOrDefault(o => o.Id == userId && !o.IsDeleted);
         }
 
-        internal int GetUserId(string email)
+        /// <summary>
+        /// Get id of all users (compact and signedUp) that shares the same email address
+        /// </summary>
+        /// <param name="user"></param>
+        /// <returns></returns>
+        public List<UserCx> GetUserProxies(int userId)
         {
-            return dbase.Users.FirstOrDefault(o => o.Email == email)?.Id??0;
+            var user = GetUser(userId);
+            if (user == null) throw new Exception("User  is null");
+            return GetUserProxies(user);
         }
 
-        internal int GetUserIdFromName(string userName)
+        public List<UserCx> GetUserProxies(UserCx user)
         {
-            return dbase.Users.FirstOrDefault(o => o.Name == userName)?.Id ?? 0;
+            return dbase.Users.Where(o => !o.IsDeleted && o.Email == user.Email).ToList();
         }
+
+        internal int GetUserId(string email)
+        {
+            return dbase.Users.FirstOrDefault(o => o.Email == email && o.IsSignUpUser)?.Id??0;
+        }
+
 
         public List<UserCx> GetOwnerUsers(int ownerId)
         {
@@ -545,9 +566,10 @@ namespace EasyMinutesServer.Models
         {
             if (meeting == null) throw new Exception("Meeting is null");
             var users = new List<UserCx>();
+            if (meeting.Author != null) users.Add(meeting.Author);
             users.AddRange(meeting.Delegates);
             users.AddRange(GetAllocatedParticipants(meeting) ?? new());
-            if (meeting.Author != null) users.Add(meeting.Author);
+
             return users.Distinct().ToList();
         }
 
@@ -591,21 +613,31 @@ namespace EasyMinutesServer.Models
         }
 
 
-        internal UserCx AddUser(string email, string name, string password)
+        internal UserCx AddCompactUser(string name, string email)
         {
             email = email.Trim();
             name = name.Trim();
-            password = password.Trim();
 
             if (email == "" && name == "") throw new Exception("Email or name must be defined");
 
-            if (email != "")
-            {
-                var userId = GetUserId(email);
-                if (userId != 0) throw new Exception("Email is already in use"); // Duplicate top-level accounts not allowed 
-            }
+            var user = new UserCx() { Email = email, Name = name, IsSignUpUser = false };
+            dbase.Users.Add(user);
 
-            var user = new UserCx() { Email = email, Name = name, Password = password };
+            dbase.SaveChanges();
+            return user;
+        }
+
+        internal UserCx AddSignUpUser(string email, string password)
+        {
+            email = email.Trim();
+            password = password.Trim();
+
+            if (email == "") throw new Exception("Email must be defined");
+            if (password == "") throw new Exception("Password must be defined");
+
+            if (dbase.Users.ToList().Exists(o => o.IsSignUpUser && o.Email == email)) throw new Exception("User with that email already exists");
+
+            var user = new UserCx() { Email = email, Password = password, IsSignUpUser = true };
             dbase.Users.Add(user);
 
             dbase.SaveChanges();
@@ -696,7 +728,7 @@ namespace EasyMinutesServer.Models
         #region *// Login
         internal (UserCx? user, string errorMessage) SignIn(string email, string password)
         {
-            var user = dbase.Users.FirstOrDefault(o=>o.Email.ToLower() == email.ToLower() && o.Password == password);
+            var user = dbase.Users.FirstOrDefault(o=>o.Email.ToLower() == email.ToLower() && o.Password == password && o.IsSignUpUser);
             if (user == null) {
                 if (!dbase.Users.ToList().Exists(o=>o.Email == email))
                 {
@@ -781,8 +813,9 @@ namespace EasyMinutesServer.Models
         }
 
         #endregion
-        internal string DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, bool isPreview = false)
+        internal List<PreviewData> DistributeMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds, bool isPreview = false)
         {
+            List<PreviewData> previewDatas = new ();
             List<UserCx> filteredUsers = new();
 
             var meeting = GetMeeting(meetingId);
@@ -822,14 +855,16 @@ namespace EasyMinutesServer.Models
                 body = body.Replace("<<UNSUBSCRIBE_URL>>", $"{serverUrl}/api/signup/UnSubscribe?id={filteredUser.Id}");
                 if (isPreview)
                 {
-                    Debug.WriteLine($"Preview generated and returned");
-                    return body;
+                    previewDatas.Add(new PreviewData { Message = $"Minutes to recipient {filteredUser.Email}", Html = body });
                 }
-                mailWorker.ScheduleMail(meeting.Name, filteredUser.Email, body);
+                else
+                {
+                    mailWorker.ScheduleMail(meeting.Name, filteredUser.Email, body);
+                }
             }
 
-            Debug.WriteLine($"Meeting succesfully distributed");
-            return "";
+            Debug.WriteLine(isPreview? $"Meeting preview succesfully generated" : $"Meeting succesfully distributed");
+            return previewDatas;
         }
 
         private static string GenerateDistributionHtmlBodyTemplate()
@@ -837,7 +872,7 @@ namespace EasyMinutesServer.Models
             var template = @$"
                 Hi <<USERNAME>><br><br>
                 Meeting: <<MEETING_NAME>>.<br><br>
-                Here is the latest meeting minutes dated {DateTime.Now:d}.<br><br>
+                Here is the latest minutes dated {DateTime.Now:d}.<br><br>
                 The topics allocated to you are highlited in <span style='color: Tomato; '>RED</span>.<br>
                 <br>
                 <<TABLE>><br>
@@ -955,7 +990,7 @@ namespace EasyMinutesServer.Models
             return sb.ToString();
         }
 
-        internal string PreviewDistributedMeeting(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds)
+        internal List<PreviewData> GetDistributedMeetingPreviews(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds)
         {
             return DistributeMeeting(meetingId, distributeFilterOption, userIds, true);
         }

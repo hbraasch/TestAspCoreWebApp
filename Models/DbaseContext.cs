@@ -32,7 +32,9 @@ namespace EasyMinutesServer.Models
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<MeetingCx>()
-                .HasOne(m => m.Author);
+                .HasOne(m => m.Author)
+                .WithMany()
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<MeetingCx>()
                         .HasMany(p => p.Delegates)
@@ -72,7 +74,7 @@ namespace EasyMinutesServer.Models
             [Key]
             public int Id { get; set; }
             public string Name { get; set; } = "";
-            public UserCx? Author { get; set; }
+            public UserCx Author { get; set; }
             public bool IsDeleted { get; set; }
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
@@ -121,12 +123,11 @@ namespace EasyMinutesServer.Models
             public int Id { get; set; }
             public int Version { get; set; }
             public DateTimeOffset DateTimeStamp { get; set; } = ConstantsGlobal.DateMinValue;
-
             public string Details { get; set; } = "";
             public DateTimeOffset ToBeCompletedDate { get; set; }
             public bool IsCompleted { get; set; }
-
             public bool IsDeleted { get; set; }
+            public string Notes { get; set; } = "";
 
             public int TopicId { get; set; }
             public TopicCx? Topic {get;set;}
@@ -135,7 +136,7 @@ namespace EasyMinutesServer.Models
 
             public TopicSession FromDb()
             {
-                return new TopicSession { Id = Id, Version = Version, DateTimeStamp = DateTimeStamp, Details = Details, ToBeCompletedDate = ToBeCompletedDate, IsCompleted = IsCompleted, IsDeleted = IsDeleted, AllocatedParticipants = AllocatedParticipants.FromDb() };
+                return new TopicSession { Id = Id, Version = Version, DateTimeStamp = DateTimeStamp, Details = Details, ToBeCompletedDate = ToBeCompletedDate, IsCompleted = IsCompleted, IsDeleted = IsDeleted, AllocatedParticipants = AllocatedParticipants.FromDb(), Notes = Notes };
             }
 
         }
@@ -154,6 +155,7 @@ namespace EasyMinutesServer.Models
             public int DisplayOrder { get; set; }
             public bool IsChecked { get; set; }
             public bool IsUnsubscribed { get; set; } = false;
+            public bool IsSignUpUser { get; set; } = false;
             public virtual ICollection<UserMasterSlave> Masters { get; set; } = new List<UserMasterSlave>();
             public virtual ICollection<UserMasterSlave> Slaves { get; set; } = new List<UserMasterSlave>();
             public virtual ICollection<MeetingCx> EditableMeetings { get; set; } = new List<MeetingCx>();
@@ -162,7 +164,7 @@ namespace EasyMinutesServer.Models
 
             public User FromDb()
             {
-                return new User { Id = Id, Name = Name, Password = Password, Email = Email, IsDeleted = IsDeleted, AccessPin = AccessPin, IsChecked = IsChecked, DisplayOrder = DisplayOrder, IsEmailConfirmed = IsEmailConfirmed, IsUnsubscribed = IsUnsubscribed};
+                return new User { Id = Id, Name = Name, Password = Password, Email = Email, IsDeleted = IsDeleted, AccessPin = AccessPin, IsChecked = IsChecked, DisplayOrder = DisplayOrder, IsEmailConfirmed = IsEmailConfirmed, IsUnsubscribed = IsUnsubscribed, IsSignUpUser = IsSignUpUser};
             }
 
             public override bool Equals(object? obj)

@@ -1,26 +1,30 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Configuration;
 
 namespace EasyMinutesServer.Models
 {
     public class BackgroundMailer : BackgroundService
     {
-        private readonly IMailWorker worker;
+        private readonly IMailWorker? worker;
+        string mailerKey = "";
 
-        public BackgroundMailer(IMailWorker worker)
+        public BackgroundMailer(IMailWorker? worker, string mailerKey)
         {
             this.worker = worker;
+            this.mailerKey = mailerKey;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await worker.DoWork(stoppingToken);
+            if (worker == null) return;
+            await worker.DoWork(mailerKey, stoppingToken);
         }
     }
 
     public interface IMailWorker
     {
-        Task DoWork(CancellationToken cancellationToken);
+        Task DoWork(string mailerKey, CancellationToken cancellationToken);
         void ScheduleMail(string meetingName, string destinationEmailAddress, string emailBody);
     }
 
@@ -43,18 +47,18 @@ namespace EasyMinutesServer.Models
             this.logger = logger;
         }
 
-        public async Task DoWork(CancellationToken cancellationToken)
+        public async Task DoWork(string mailerKey, CancellationToken cancellationToken)
         {
             SmtpClient client;
             MailData mailData;
 
             if (Constants.IsMailServerReal)
             {
-                // Send actual mail using Gmail SMTP - https://stackoverflow.com/questions/67950293/how-to-fix-gmail-smtp-error-the-smtp-server-requires-a-secure-connection-or-th
+                // Send actual mail using Gmail SMTP - https://stackoverflow.com/questions/67950293/how-to-fix-gmail-smtp-error-the-smtp-server-requires-a-secure-connection-or-th zfwqifwbvptmrscf
                 client = new SmtpClient("smtp.gmail.com")
                 {
                     Port = 587,
-                    Credentials = new NetworkCredential("treeapps.develop@gmail.com", "uxgisiktlesjcfkd"), // Need to generate an App Password for [Mail] on {Windows Machine] for gmail account treeapps.develop@gmail.com
+                    Credentials = new NetworkCredential("treeapps.mailer@gmail.com", mailerKey), // Need to generate an App Password for [Mail] on {Windows Machine] for gmail account treeapps.develop@gmail.com
                     EnableSsl = true,
                 };
             }
@@ -80,7 +84,7 @@ namespace EasyMinutesServer.Models
 
                     MailMessage message = new()
                     {
-                        From = new MailAddress("treeapps.develop@gmail.com")
+                        From = new MailAddress("treeapps.mailer@gmail.com")
                     };
                     message.To.Add(mailData.DestinationEmailAddress);
                     message.Subject = $"EasyMinutes - Minutes of meeting: {mailData.MeetingName}";
