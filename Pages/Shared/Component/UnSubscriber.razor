@@ -2,17 +2,18 @@
 @using Microsoft.Extensions.Logging
 @using EasyMinutesServer.Models;
 @using System.ComponentModel.DataAnnotations;
+@using MatBlazor;
 
-@inject ILogger<Component> Logger
+@inject ILogger<UnSubscriber> Logger
 @inject MinutesModel minutesModel
 <h3>UnSubscribe from emails</h3>
 
 <EditForm Model="@model" OnValidSubmit="@HandleValidSubmit">
     <DataAnnotationsValidator />
     <ValidationSummary />
-    <InputText  placeholder="Email" @bind-Value="@model.Email" /><br>
-    <InputText type="password" placeholder="Password" @bind-Value="@model.Password" /><br>
-    <button type="submit">Submit</button><br/>
+    <MatTextField Label="Email" placeholder="Email" @bind-Value="@model.Email" /><br>
+    <MatTextField Label="Password" type="password" placeholder="Password" @bind-Value="@model.Password" /><br>
+    <MatButton type="submit">Submit</MatButton><br/>
     <p>@message</p>
 </EditForm>
 

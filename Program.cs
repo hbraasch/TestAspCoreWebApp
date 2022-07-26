@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Configuration;
 using System.Net.Sockets;
 using System.Net;
-
+using EmbeddedBlazorContent;
+using MatBlazor;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllersWithViews();
 builder.Services.AddControllers();
+builder.Services.AddMatBlazor();
 
 #region *// Database
 // var connectionstring = builder.Configuration.GetConnectionString("DefaultSqliteConnection");

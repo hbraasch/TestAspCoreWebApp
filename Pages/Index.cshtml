@@ -1,14 +1,19 @@
 ﻿@page
 @model IndexModel
+@using MatBlazor;
 @{
     ViewData["Title"] = "Home page";
 }
-
+<script src="_content/MatBlazor/dist/matBlazor.js"></script>
+<link href="_content/MatBlazor/dist/matBlazor.css" rel="stylesheet" />
 <div class="text-center">
     <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-
 </div>
+<div>
+    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.UserGuideLink>(RenderMode.ServerPrerendered, new()))<br />
+    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.VideoTutorialLink>(RenderMode.ServerPrerendered, new()))
+</div>
+<hr>
 <div>
     @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.UnSubscriber>(RenderMode.ServerPrerendered, new ()))
 </div>

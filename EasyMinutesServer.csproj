@@ -9,7 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="EmbeddedBlazorContent" Version="1.10.0" />
     <PackageReference Include="EntityFramework" Version="6.4.4" />
+    <PackageReference Include="MatBlazor" Version="2.8.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.7">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
