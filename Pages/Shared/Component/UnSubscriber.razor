@@ -1,0 +1,52 @@
+﻿@using Microsoft.AspNetCore.Components
+@using Microsoft.Extensions.Logging
+@using EasyMinutesServer.Models;
+@using System.ComponentModel.DataAnnotations;
+
+@inject ILogger<Component> Logger
+@inject MinutesModel minutesModel
+<h3>UnSubscribe from emails</h3>
+
+<EditForm Model="@model" OnValidSubmit="@HandleValidSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <InputText  placeholder="Email" @bind-Value="@model.Email" /><br>
+    <InputText type="password" placeholder="Password" @bind-Value="@model.Password" /><br>
+    <button type="submit">Submit</button><br/>
+    <p>@message</p>
+</EditForm>
+
+@code {
+    class Login
+    {
+        [Required]
+        public string Email { get; set; } = "";
+        [Required]
+        public string Password { get; set; } = "";
+    }
+
+    private Login model = new Login();
+    private string message  = "";
+
+    private void HandleValidSubmit()
+    {
+        Logger.LogInformation("HandleValidSubmit called");
+        var (user, errorMessage) = minutesModel.SignIn(model.Email, model.Password);
+        if (user == null)
+        {
+            message = errorMessage;
+            return;
+        }
+
+        try
+        {
+            minutesModel.UnSubscribe(user.Id.ToString());
+            message = "Successfully unsubscribed";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+
+    }
+}

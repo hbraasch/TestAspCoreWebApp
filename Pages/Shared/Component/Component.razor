@@ -1,0 +1,42 @@
+﻿@using Microsoft.AspNetCore.Components
+@using Microsoft.Extensions.Logging
+@using EasyMinutesServer.Models;
+
+@inject ILogger<Component> Logger
+@inject MinutesModel minutesModel
+<h3>Blazor Component in MVC</h3>
+
+<EditForm Model="@exampleModel" OnValidSubmit="@HandleValidSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <InputText id="name" @bind-Value="exampleModel.Name" />
+    <button @onclick="Test" class="btn btn-dark">Click to get answer</button>
+
+    <button type="submit">Submit</button>
+</EditForm>
+<br />
+<div>@Data </div>
+@code {
+
+    private ExampleModel exampleModel = new();
+
+    [Parameter]
+    public string Data { get; set; } = string.Empty;
+    private void Test()
+    {
+        var user = minutesModel.GetUser(1);
+        Data = $"Button Clicked: {exampleModel.Name}: {user.Email}";
+    }
+
+    private void HandleValidSubmit()
+    {
+        Logger.LogInformation("HandleValidSubmit called");
+
+        // Process the valid form
+    }
+    protected override void OnInitialized()
+    {
+
+    }
+}

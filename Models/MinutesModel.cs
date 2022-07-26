@@ -742,6 +742,7 @@ namespace EasyMinutesServer.Models
             return (user, "");
         }
 
+
         internal (UserCx? user, string errorMessage) SignIn(string pin)
         {
             var foundPin = dbase.Pins.Include(o=>o.User).FirstOrDefault(o => o.Value == pin);

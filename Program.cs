@@ -9,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+builder.Services.AddControllersWithViews();
 builder.Services.AddControllers();
 
 #region *// Database
@@ -39,6 +41,7 @@ builder.Services.AddHostedService(sp => { return new BackgroundMailer(sp.GetServ
 
 builder.Services.AddTransient<MinutesModel>();
 
+
 var app = builder.Build();
 
 #region *// Ensure database exists
@@ -67,6 +70,14 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 app.MapControllers();
+
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllerRoute(
+        name: "default",
+        pattern: "{controller=Home}/{action=Index}/{id?}");
+    endpoints.MapBlazorHub();
+});
 
 app.Run();
 
