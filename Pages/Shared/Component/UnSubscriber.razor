@@ -8,17 +8,37 @@
 @inject MinutesModel minutesModel
 <h3>UnSubscribe from emails</h3>
 
-<EditForm Model="@model" OnValidSubmit="@HandleValidSubmit">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
-    <MatTextField Label="Email" placeholder="Email" @bind-Value="@model.Email" /><br>
-    <MatTextField Label="Password" type="password" placeholder="Password" @bind-Value="@model.Password" /><br>
-    <MatButton type="submit">Submit</MatButton><br/>
-    <p>@message</p>
-</EditForm>
+
+<table>
+    <tr>
+        <td>
+            <EditForm Model="@emailLoginModel" OnValidSubmit="@HandleValidEmailSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <MatTextField Label="Email" placeholder="Email" @bind-Value="@emailLoginModel.Email" /><br>
+                <MatTextField Label="Password" type="password" placeholder="Password" @bind-Value="@emailLoginModel.Password" /><br>
+                <MatButton type="submit">Submit</MatButton><br />
+                <p>@message</p>
+            </EditForm>
+        </td>
+    </tr>
+    <tr><td><p><strong>OR BY USING</strong></p></td></tr>
+    <tr>
+        <td>
+            <EditForm Model="@pinLoginModel" OnValidSubmit="@HandleValidPinSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <MatTextField Label="Pin" placeholder="Pin" @bind-Value="@pinLoginModel.Pin" /><br>
+                <MatButton type="submit">Submit</MatButton><br />
+                <p>@message</p>
+            </EditForm>
+        </td>
+    </tr>
+
+</table>
 
 @code {
-    class Login
+    class EmailLogin
     {
         [Required]
         public string Email { get; set; } = "";
@@ -26,13 +46,42 @@
         public string Password { get; set; } = "";
     }
 
-    private Login model = new Login();
+    class PinLogin
+    {
+        [Required]
+        public string Pin { get; set; } = "";
+    }
+
+    private EmailLogin emailLoginModel = new EmailLogin();
+    private PinLogin pinLoginModel = new PinLogin();
     private string message  = "";
 
-    private void HandleValidSubmit()
+    private void HandleValidEmailSubmit()
     {
         Logger.LogInformation("HandleValidSubmit called");
-        var (user, errorMessage) = minutesModel.SignIn(model.Email, model.Password);
+        var (user, errorMessage) = minutesModel.SignIn(emailLoginModel.Email, emailLoginModel.Password);
+        if (user == null)
+        {
+            message = errorMessage;
+            return;
+        }
+
+        try
+        {
+            minutesModel.UnSubscribe(user.Id.ToString());
+            message = "Successfully unsubscribed";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+
+    }
+
+    private void HandleValidPinSubmit()
+    {
+        Logger.LogInformation("HandleValidSubmit called");
+        var (user, errorMessage) = minutesModel.SignIn(pinLoginModel.Pin);
         if (user == null)
         {
             message = errorMessage;
