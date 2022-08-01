@@ -10,8 +10,8 @@
     <h1 class="display-4">Welcome</h1>
 </div>
 <div>
-    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.UserGuideLink>(RenderMode.ServerPrerendered, new()))<br />
-    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.VideoTutorialLink>(RenderMode.ServerPrerendered, new()))
+    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.HyperLink>(RenderMode.ServerPrerendered, new { Text = "User Guide", Href = "/UserGuide" }))<br />
+    @(await Html.RenderComponentAsync<EasyMinutesServer.Pages.Shared.Component.HyperLink>(RenderMode.ServerPrerendered, new { Text = "Video Tutorial", Href = "https://www.google.com" }))
 </div>
 <hr>
 <div>

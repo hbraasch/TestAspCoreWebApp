@@ -1,0 +1,11 @@
+﻿@using MatBlazor;
+
+<MatButtonLink Icon="favorite" Href=@Href >@Text</MatButtonLink>
+@code
+{
+    [Parameter]
+    public string Text { get; set; } = "";
+    [Parameter]
+    public string Href { get; set; } = "";
+
+}
