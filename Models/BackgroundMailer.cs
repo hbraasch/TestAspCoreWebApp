@@ -25,7 +25,7 @@ namespace EasyMinutesServer.Models
     public interface IMailWorker
     {
         Task DoWork(string mailerKey, CancellationToken cancellationToken);
-        void ScheduleMail(string meetingName, string destinationEmailAddress, string emailBody);
+        void ScheduleMail(string meetingName, string destinationEmailAddress, string emailBody, string wordDocAttachmentFullFilename);
     }
 
     public class MailWorker : IMailWorker
@@ -36,6 +36,7 @@ namespace EasyMinutesServer.Models
             public string MeetingName { get; set; } = "";
             public string DestinationEmailAddress { get; set; } = "";
             public string EmailBody { get; set; } = "";
+            public string wordDocAttachmentFullFilename { get; set; } = "";
         }
 
         private readonly List<MailData> MailDatas = new();
@@ -90,6 +91,7 @@ namespace EasyMinutesServer.Models
                     message.Subject = $"EasyMinutes - Minutes of meeting: {mailData.MeetingName}";
                     message.IsBodyHtml = true;
                     message.Body = mailData.EmailBody;
+                    message.Attachments.Add(new Attachment(mailData.wordDocAttachmentFullFilename));
 
                     try
                     {
@@ -114,11 +116,11 @@ namespace EasyMinutesServer.Models
             }
         }
 
-        public void ScheduleMail(string meetingName, string destinationEmailAddress, string emailBody)
+        public void ScheduleMail(string meetingName, string destinationEmailAddress, string emailBody, string wordDocAttachmentFullFilename)
         {
             lock (MailDatas)
             {
-                MailDatas.Add(new MailData { MeetingName = meetingName, DestinationEmailAddress = destinationEmailAddress, EmailBody = emailBody });
+                MailDatas.Add(new MailData { MeetingName = meetingName, DestinationEmailAddress = destinationEmailAddress, EmailBody = emailBody, wordDocAttachmentFullFilename = wordDocAttachmentFullFilename });
             }
         }
     }

@@ -1,14 +1,23 @@
-﻿using EasyMinutesServer.Helpers;
+﻿using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using EasyMinutesServer.Helpers;
 using EasyMinutesServer.Shared;
+using MatBlazor;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Mail;
+using System.Reflection.Metadata;
 using System.Text;
 using TreeApps.Maui.Helpers;
 using static EasyMinutesServer.Models.DbaseContext;
 using static EasyMinutesServer.Shared.Dbase;
 using static EasyMinutesServer.Shared.MinutesController;
+using static System.Net.Mime.MediaTypeNames;
+using Document = DocumentFormat.OpenXml.Wordprocessing.Document;
+using TableRow = DocumentFormat.OpenXml.Wordprocessing.TableRow;
+using Text = DocumentFormat.OpenXml.Wordprocessing.Text;
 
 namespace EasyMinutesServer.Models
 {
@@ -19,6 +28,8 @@ namespace EasyMinutesServer.Models
 
         readonly DbaseContext dbase;
         readonly IMailWorker mailWorker;
+
+        public string WorkPath = "";
 
         public MinutesModel(DbaseContext dbase, IMailWorker mailWorker)
         {
@@ -460,7 +471,8 @@ namespace EasyMinutesServer.Models
             {
                 DateTimeStamp = dateTimeStamp,
                 ToBeCompletedDate = currentTopicSession.ToBeCompletedDate,
-                Version = currentTopicSession.Version + 1
+                Version = currentTopicSession.Version + 1,
+                Notes = currentTopicSession.Notes
             };
             var topic = currentTopicSession.Topic;
             if (topic == null) throw new Exception("Topic is null");
@@ -846,6 +858,7 @@ namespace EasyMinutesServer.Models
             foreach (var filteredUser in filteredUsers)
             {
                 var minutesHtmlTable = GenerateMinutesHtmlTable(meeting, filteredUser);
+                var minutesWordDocFullFilename = GenerateMinutesWordDoc(meeting, filteredUser);
                 var body = GenerateDistributionHtmlBodyTemplate();
                 body = body.Replace("<<USERNAME>>", filteredUser.FromDb().Name);
                 body = body.Replace("<<MEETING_NAME>>", meeting.Name);
@@ -860,7 +873,7 @@ namespace EasyMinutesServer.Models
                 }
                 else
                 {
-                    mailWorker.ScheduleMail(meeting.Name, filteredUser.Email, body);
+                    mailWorker.ScheduleMail(meeting.Name, filteredUser.Email, body, minutesWordDocFullFilename);
                 }
             }
 
@@ -887,7 +900,10 @@ namespace EasyMinutesServer.Models
                 ";
             return template;
         }
-
+        internal List<PreviewData> GetDistributedMeetingPreviews(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds)
+        {
+            return DistributeMeeting(meetingId, distributeFilterOption, userIds, true);
+        }
         class CellData
         {
             public int TopicId;
@@ -991,9 +1007,304 @@ namespace EasyMinutesServer.Models
             return sb.ToString();
         }
 
-        internal List<PreviewData> GetDistributedMeetingPreviews(int meetingId, DistributeFilterOptions distributeFilterOption, List<int> userIds)
+        class WordCellData
         {
-            return DistributeMeeting(meetingId, distributeFilterOption, userIds, true);
+            public int TopicId;
+            public string? Details;
+            public DateTimeOffset? DateTimeStamp;
+            public List<string>? Participants;
+            public bool? IsFiltered;
+        }
+
+        private string GenerateMinutesWordDoc(MeetingCx meeting, UserCx filteredUser)
+        {
+            var topics = meeting.Topics;
+
+
+            #region *// Generate cell data
+            List<WordCellData> cellDatas = new();
+            TopicSessionCx? currentSession = null;
+            TopicSessionCx? previousSession = null;
+            foreach (var topic in topics)
+            {
+                currentSession = null;
+                previousSession = null;
+
+                foreach (var session in topic.Sessions.OrderByDescending(o => o.DateTimeStamp))
+                {
+                    if ((currentSession == null) && (previousSession == null))
+                    {
+                        if (!session.Details.IsNullOrEmpty())
+                        {
+                            currentSession = session;
+                        }
+                    }
+                    else if ((currentSession != null) && (previousSession == null))
+                    {
+                        if (!session.Details.IsNullOrEmpty())
+                        {
+                            previousSession = session;
+                            break;
+                        }
+                    }
+                }
+                if (currentSession != null)
+                {
+                    var isFiltered = currentSession.AllocatedParticipants.Exists(o => o.Id == filteredUser.Id);
+                    cellDatas.Add(new WordCellData { TopicId = topic.Id, DateTimeStamp = currentSession.DateTimeStamp, Details = currentSession.Details, Participants = currentSession.AllocatedParticipants.Select(o=>o.Name).ToList(), IsFiltered = isFiltered });
+                }
+                else
+                {
+                    cellDatas.Add(new WordCellData { TopicId = topic.Id, DateTimeStamp = null, Details = null, Participants = null, IsFiltered = null });
+                }
+                if (previousSession != null)
+                {
+                     var isFiltered = previousSession.AllocatedParticipants.Exists(o => o.Id == filteredUser.Id);
+                    cellDatas.Add(new WordCellData { TopicId = topic.Id, DateTimeStamp = previousSession.DateTimeStamp, Details = previousSession.Details, Participants = previousSession.AllocatedParticipants.Select(o => o.Name).ToList(), IsFiltered = isFiltered });
+                }
+                else
+                {
+                    cellDatas.Add(new WordCellData { TopicId = topic.Id, DateTimeStamp = null, Details = null, Participants = null, IsFiltered = null });
+                }
+
+            }
+            #endregion
+
+            var (targetPath, wordDoc, document, body) = GenerateWordDocStart(meeting.Name, filteredUser.Id);
+
+            #region *// Add table to body
+            Table table = new Table();
+            TableProperties tableProperties = new TableProperties();
+            tableProperties.Append(new TableWidth() { Width = "5000", Type = TableWidthUnitValues.Pct });
+            table.Append(tableProperties);
+
+            TableProperties props = new TableProperties(
+                new TableBorders(
+                new TopBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                },
+                new BottomBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                },
+                new LeftBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                },
+                new RightBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                },
+                new InsideHorizontalBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                },
+                new InsideVerticalBorder
+                {
+                    Val = new EnumValue<BorderValues>(BorderValues.Single),
+                    Size = 1
+                }));
+            table.AppendChild<TableProperties>(props);
+
+            var tr = new TableRow();
+            tr.Append(GenerateWordTextTableCell("Topic"));
+            tr.Append(GenerateWordTextTableCell("Latest"));
+            tr.Append(GenerateWordTextTableCell("Previous"));
+            table.Append(tr);
+
+
+            foreach (var topic in topics)
+            {
+                var cellData = cellDatas.Where(o => o.TopicId == topic.Id).ToList();
+                tr = new TableRow();
+                tr.Append(GenerateWordTextTableCell(topic.Name));
+                tr.Append(GenerateWordDetailsTableCell(cellData[0]));
+                tr.Append(GenerateWordDetailsTableCell(cellData[1]));
+                table.Append(tr);
+            }
+
+            body.Append(table); 
+            #endregion
+
+            document.Append(body);
+
+            wordDoc.MainDocumentPart.Document = document;
+
+            wordDoc.Close();
+
+            Debug.WriteLine(targetPath);
+
+            return targetPath;
+        }
+
+        private static TableCell GenerateWordTextTableCell(string topicName)
+        {
+            var tc = new TableCell();
+
+            RunProperties rp = new RunProperties();
+            // Add the Color object for your run into the RunProperties
+            rp.Append(new DocumentFormat.OpenXml.Wordprocessing.Color() { Val = "000000" });
+            // Create the Run object
+            Run run = new Run();
+            // Assign your RunProperties to your Run
+            run.RunProperties = rp;
+            run.Append(new Text(topicName));
+
+            var tcp = new TableCellProperties(new TableCellWidth { Type = TableWidthUnitValues.Auto });
+            // Create the Shading object
+            DocumentFormat.OpenXml.Wordprocessing.Shading shading =
+                new DocumentFormat.OpenXml.Wordprocessing.Shading()
+                {
+                    Color = "auto",
+                    Fill = "FFFFFF",
+                    Val = ShadingPatternValues.Clear
+                };
+            // Add the Shading object to the TableCellProperties object
+            tcp.Append(shading);
+
+            tc.Append(new Paragraph(run));
+
+            tc.Append(tcp);
+
+            return tc;
+        }
+        private static TableCell GenerateWordDetailsTableCell(WordCellData wordCellData)
+        {
+            var tc = new TableCell();
+
+            Run runDetails = new Run();
+            Run runDateTime = new Run();
+            Run runParticipants = new Run();
+
+            // Add your text to your Run
+            if (wordCellData.Details != null)
+            {
+                RunProperties runDetailsProperties = new RunProperties();
+                runDetailsProperties.Append(new DocumentFormat.OpenXml.Wordprocessing.Color() { Val = "000000" });
+                runDetails.RunProperties = runDetailsProperties;
+                runDetails.Append(new Text(wordCellData.Details));
+                //runDetails.Append(new Break());
+
+                RunProperties runDateTimeProperties = new RunProperties();
+                runDateTimeProperties.Append(new DocumentFormat.OpenXml.Wordprocessing.Color() { Val = "000000" });
+                runDateTimeProperties.Append(new FontSize() { Val = "10" });
+                runDateTime.RunProperties = runDateTimeProperties;
+                runDateTime.Append(new Text($"{wordCellData.DateTimeStamp:d}"));
+                //runDateTime.Append(new Break());
+
+
+                RunProperties runParticipantsProperties = new RunProperties();
+                runParticipantsProperties.Append(new DocumentFormat.OpenXml.Wordprocessing.Color() { Val = "000000" });
+                runParticipantsProperties.Append(new FontSize() { Val = "10" });
+                runParticipants.RunProperties = runParticipantsProperties;
+
+                var participantString = "";
+                foreach (var participant in wordCellData.Participants??new())
+                {
+                    if (participantString == "")
+                    {
+                        participantString = participant;
+                    }
+                    else
+                    {
+                        participantString += ", " + participant;
+                    }
+                }
+                runParticipants.Append(new Text(participantString));
+            }
+            else
+            {
+                runDetails.Append(new Text(""));
+            }
+
+
+            var tcp = new TableCellProperties(new TableCellWidth { Type = TableWidthUnitValues.Auto });
+            // Create the Shading object
+            if (wordCellData.IsFiltered??false)
+            {
+                DocumentFormat.OpenXml.Wordprocessing.Shading shading = new DocumentFormat.OpenXml.Wordprocessing.Shading()
+            {
+                Color = "auto",
+                Fill = "FF6347",
+                Val = ShadingPatternValues.Clear
+            };
+                // Add the Shading object to the TableCellProperties object
+                tcp.Append(shading); 
+            }
+
+            tc.Append(new Paragraph(runDetails));
+            tc.Append(new Paragraph(runDateTime));
+            tc.Append(new Paragraph(runParticipants));
+
+            tc.Append(tcp);
+
+            return tc;
+        }
+
+        private (string, WordprocessingDocument, Document, Body) GenerateWordDocStart(string meetingName, int filterUserId)
+        {
+
+            string targetFile = System.IO.Path.Combine(WorkPath, $"{filterUserId}_meeting.docx");
+            var wordDoc = WordprocessingDocument.Create(targetFile, DocumentFormat.OpenXml.WordprocessingDocumentType.Document, true);
+            wordDoc.AddMainDocumentPart();
+
+            Document doc = new Document();
+            Body body = new Body();
+
+            // Title
+            Paragraph para = new Paragraph();
+
+            ParagraphProperties paragraphProperties1 = new ParagraphProperties();
+            ParagraphStyleId paragraphStyleId1 = new ParagraphStyleId() { Val = "Normal" };
+            Justification justification1 = new Justification() { Val = JustificationValues.Center };
+            ParagraphMarkRunProperties paragraphMarkRunProperties1 = new ParagraphMarkRunProperties();
+
+            paragraphProperties1.Append(paragraphStyleId1);
+            paragraphProperties1.Append(justification1);
+            paragraphProperties1.Append(paragraphMarkRunProperties1);
+
+            Run run = new Run();
+            RunProperties runProperties1 = new RunProperties();
+
+            Text text = new Text() { Text = $"Minutes of Meeting: {meetingName}" };
+
+            run.Append(runProperties1);
+            run.Append(text);
+            para.Append(paragraphProperties1);
+            para.Append(run);
+
+            // Intro
+            Paragraph para2 = new Paragraph();
+
+            ParagraphProperties paragraphProperties2 = new ParagraphProperties();
+            ParagraphStyleId paragraphStyleId2 = new ParagraphStyleId() { Val = "Normal" };
+            Justification justification2 = new Justification() { Val = JustificationValues.Start };
+            ParagraphMarkRunProperties paragraphMarkRunProperties2 = new ParagraphMarkRunProperties();
+
+            paragraphProperties2.Append(paragraphStyleId2);
+            paragraphProperties2.Append(justification2);
+            paragraphProperties2.Append(paragraphMarkRunProperties2);
+
+            Run run2 = new Run();
+            RunProperties runProperties3 = new RunProperties();
+
+            run2.AppendChild(new Break());
+            run2.AppendChild(new Text($"This is the latest minutes dated {DateTime.Now:d}"));
+
+            para2.Append(paragraphProperties2);
+            para2.Append(run2);
+
+            body.Append(para);
+            body.Append(para2);
+
+            return (targetFile, wordDoc, doc, body);
+
         }
 
         internal static void ServerTest()

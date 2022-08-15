@@ -2,7 +2,6 @@
 
 #if __CLIENT__
 using EasyMinutes.Helpers;
-using Microsoft.AspNetCore.SignalR.Client;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Text;
@@ -130,9 +129,19 @@ namespace EasyMinutesServer.Shared
     public class MinutesController : ControllerBase
     {
         readonly MinutesModel minutesModel;
-        public MinutesController(MinutesModel minutesModel)
+        private IWebHostEnvironment webHostEnvironment;
+
+        public MinutesController(IWebHostEnvironment webHostEnvironment, MinutesModel minutesModel)
         {
             this.minutesModel = minutesModel;
+
+            this.webHostEnvironment = webHostEnvironment;
+            string path = webHostEnvironment.WebRootPath + "\\Files";
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+            minutesModel.WorkPath = path;
         }
 
         private static async Task<T2> ReceiveMessage<T1, T2>(T1 command, Func<T1, T2> handler) where T2: ResponseBase, new()
